@@ -1,0 +1,798 @@
+/* Root definitions and theme colors */
+:root {
+    --bg-parchment: #f6f3ea;      /* Rice paper / traditional parchment color */
+    --accent-crimson: #bc002d;    /* Japanese sun vermilion/crimson red */
+    --accent-crimson-hover: #9c0024;
+    --lacquer-black: #161616;     /* Dark charcoal lacquer black */
+    --bamboo-green: #3d7e3a;      /* Bamboo green */
+    --bamboo-light: #5ca358;
+    --bamboo-dark: #224d20;
+    --sakura-pink: #ff9cb6;       /* Sweet cherry blossom pink */
+    --shoji-white: rgba(253, 251, 247, 0.82); /* Semi-transparent shoji paper */
+    --wood-border: #28211b;       /* Charcoal brown wood */
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-parchment);
+    /* Subtle background grid pattern mimicking traditional Tatami mats or Japanese paper sliding doors */
+    background-image: 
+        linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    color: var(--lacquer-black);
+    font-family: 'Sawarabi Mincho', 'Noto Sans JP', 'Hiragino Mincho ProN', serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    padding: 20px;
+}
+
+/* Canvas background for falling sakura petals */
+#sakura-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* Big red sun background decoration */
+.rising-sun {
+    position: absolute;
+    top: 35%;
+    left: 35%;
+    transform: translate(-50%, -50%);
+    width: min(500px, 80vw);
+    height: min(500px, 80vw);
+    background-color: var(--accent-crimson);
+    border-radius: 50%;
+    opacity: 0.12;
+    filter: blur(4px);
+    z-index: 2;
+    pointer-events: none;
+    animation: pulseSun 12s ease-in-out infinite alternate;
+}
+
+@keyframes pulseSun {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 0.1; }
+    100% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.15; }
+}
+
+/* Ambient Bamboo SVG stalks on left/right edges */
+.ambient-decor {
+    position: fixed;
+    bottom: 0;
+    width: 120px;
+    height: 90vh;
+    opacity: 0.35;
+    z-index: 2;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.left-bamboo {
+    left: 2%;
+}
+
+.right-bamboo {
+    right: 2%;
+    transform: scaleX(-1); /* mirror */
+}
+
+@media (max-width: 1100px) {
+    .ambient-decor {
+        opacity: 0.12; /* Tone it down on smaller screens */
+    }
+}
+
+/* Core grid container layout */
+.container {
+    width: 100%;
+    max-width: 1050px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    z-index: 3;
+}
+
+/* Left Vertical Calligraphy Title */
+.vertical-title {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 0.8rem;
+    color: var(--lacquer-black);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.08);
+    position: relative;
+    user-select: none;
+    border-right: 2px solid var(--accent-crimson);
+    padding-right: 15px;
+    height: 380px;
+}
+
+.jp-char {
+    transition: color 0.3s ease, transform 0.3s ease;
+    cursor: default;
+}
+
+.jp-char:hover {
+    color: var(--accent-crimson);
+    transform: scale(1.1);
+}
+
+.vertical-sub {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.8rem;
+    letter-spacing: 0.15rem;
+    color: #666;
+    text-transform: uppercase;
+    margin-top: 15px;
+    font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* Glass-shoji Player Box Container */
+.glass-container {
+    background: var(--shoji-white);
+    border: 6px double var(--wood-border);
+    box-shadow: 
+        0 4px 0px #0c0805, 
+        0 15px 35px rgba(22, 18, 15, 0.25),
+        inset 0 0 40px rgba(0, 0, 0, 0.03);
+    border-radius: 2px;
+    padding: 24px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    width: 100%;
+    max-width: 440px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Traditional Shoji grid border design overlay */
+.glass-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border: 1px solid rgba(0,0,0,0.06);
+    pointer-events: none;
+    z-index: 15;
+}
+
+.card-inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Katana SVG top element */
+.katana-wrapper {
+    width: 100%;
+    margin-bottom: 15px;
+    filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.15));
+}
+
+.katana-svg {
+    display: block;
+}
+
+/* Title block inside player */
+.player-header {
+    text-align: center;
+    margin-bottom: 20px;
+    width: 100%;
+}
+
+.player-header h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: 0.35rem;
+    color: var(--lacquer-black);
+    margin-bottom: 3px;
+    font-family: 'Sawarabi Mincho', serif;
+}
+
+.player-header .subtitle {
+    font-size: 0.75rem;
+    letter-spacing: 0.2rem;
+    color: #777;
+    font-weight: 400;
+    text-transform: uppercase;
+    font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* Disc/Vinyl Spinning Area */
+.disc-section {
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.vinyl-outer {
+    width: 190px;
+    height: 190px;
+    background: radial-gradient(circle, #2d2d2d 0%, #151515 45%, #050505 70%, #202020 95%, #111111 100%);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 
+        0 8px 25px rgba(0,0,0,0.45), 
+        inset 0 0 12px rgba(255,255,255,0.12);
+    position: relative;
+    border: 3px solid #111;
+    transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Vinyl records grooves effect */
+.vinyl-grooves {
+    position: absolute;
+    top: 5px; left: 5px; right: 5px; bottom: 5px;
+    border-radius: 50%;
+    background: repeating-radial-gradient(
+        circle,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.03) 3px,
+        rgba(0, 0, 0, 0.06) 4px
+    );
+    pointer-events: none;
+}
+
+.vinyl-label {
+    width: 76px;
+    height: 76px;
+    background-color: #fff8eb;
+    border-radius: 50%;
+    border: 2px dashed rgba(188, 0, 45, 0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+    position: relative;
+}
+
+.vinyl-artwork {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+/* Art inside vinyl label: Sun and mount silhouette */
+.sun-art {
+    width: 28px;
+    height: 28px;
+    background-color: var(--accent-crimson);
+    border-radius: 50%;
+    position: absolute;
+    top: 24%;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.mountain-silhouette {
+    width: 100%;
+    height: 25px;
+    background-color: #1a1a1a;
+    position: absolute;
+    bottom: 0;
+    clip-path: polygon(0% 100%, 15% 100%, 50% 30%, 85% 100%, 100% 100%);
+}
+
+/* Spin animation applied dynamically when audio is playing */
+@keyframes rotateVinyl {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.vinyl-outer.playing {
+    animation: rotateVinyl 12s linear infinite;
+}
+
+/* Track info texts */
+.track-info {
+    text-align: center;
+    margin-bottom: 22px;
+    width: 100%;
+}
+
+.track-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--lacquer-black);
+    margin-bottom: 6px;
+    font-family: 'Sawarabi Mincho', serif;
+    letter-spacing: 0.1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+    margin: 0 auto 6px auto;
+}
+
+.track-artist {
+    font-size: 0.8rem;
+    color: #615a53;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 400;
+}
+
+/* Custom Bamboo Progress Slider */
+.progress-section {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 12px;
+    margin-bottom: 25px;
+    user-select: none;
+}
+
+.time-label {
+    font-size: 0.7rem;
+    font-family: monospace;
+    color: #7a7065;
+    width: 35px;
+}
+
+#current-time {
+    text-align: right;
+}
+
+#duration {
+    text-align: left;
+}
+
+.bamboo-progress-container {
+    flex-grow: 1;
+    height: 16px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.bamboo-rail {
+    position: absolute;
+    width: 100%;
+    height: 6px;
+    background-color: #ccc2b1;
+    border-radius: 4px;
+    overflow: visible;
+    border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+.bamboo-joint {
+    position: absolute;
+    top: -2px;
+    width: 4px;
+    height: 10px;
+    background-color: #a49987;
+    border-radius: 2px;
+}
+
+.bamboo-bar {
+    position: absolute;
+    height: 6px;
+    background: linear-gradient(to right, var(--bamboo-green), var(--bamboo-light));
+    border-radius: 4px 0 0 4px;
+    width: 0%;
+}
+
+.bamboo-knob {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 0%;
+    transform: translate(-50%, -6px);
+    z-index: 5;
+    cursor: grab;
+    filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.2));
+    transition: transform 0.1s ease;
+}
+
+.bamboo-knob:active {
+    cursor: grabbing;
+    transform: translate(-50%, -6px) scale(1.15);
+}
+
+/* Player buttons / controls row */
+.player-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 28px;
+    margin-bottom: 25px;
+    width: 100%;
+}
+
+.ctrl-btn {
+    background: none;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Normal button styling (hanko style or subtle circle) */
+.ctrl-btn:not(.play-btn) {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid #d2c8b7;
+    background-color: rgba(255,255,255,0.4);
+    color: #4a3e35;
+    font-size: 1.1rem;
+}
+
+.ctrl-btn:not(.play-btn):hover {
+    background-color: var(--lacquer-black);
+    border-color: var(--lacquer-black);
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.ctrl-btn:not(.play-btn):active {
+    transform: translateY(0px) scale(0.95);
+}
+
+/* Main play button */
+.play-btn {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--accent-crimson) 0%, #aa0022 100%);
+    box-shadow: 
+        0 4px 8px rgba(170, 0, 34, 0.3),
+        inset 0 2px 4px rgba(255,255,255,0.3);
+    color: #fff;
+    font-size: 1.3rem;
+    border: 2px solid #fff;
+}
+
+.play-btn:hover {
+    background: radial-gradient(circle, #e01242 0%, var(--accent-crimson) 100%);
+    transform: scale(1.08) rotate(3deg);
+    box-shadow: 0 6px 12px rgba(170, 0, 34, 0.45);
+}
+
+.play-btn:active {
+    transform: scale(0.96);
+}
+
+/* Player Footer containing volume slider & playlist button */
+.player-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    padding-top: 15px;
+    gap: 15px;
+}
+
+/* Volume controls stylized as root bamboos */
+.volume-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-grow: 1;
+}
+
+.volume-icon {
+    font-size: 0.9rem;
+    color: #7c7267;
+}
+
+.volume-slider-wrapper {
+    flex-grow: 1;
+    max-width: 100px;
+    height: 12px;
+    position: relative;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.volume-rail {
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    background-color: #d8cfc0;
+    border-radius: 2px;
+}
+
+.volume-bar {
+    position: absolute;
+    height: 4px;
+    background-color: #6a5e53;
+    border-radius: 2px 0 0 2px;
+}
+
+.volume-knob {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: var(--accent-crimson);
+    border-radius: 50%;
+    transform: translate(-50%, -3px);
+}
+
+/* Playlist Toggle */
+.playlist-toggle-btn {
+    background-color: transparent;
+    border: 1px solid #c2b5a3;
+    border-radius: 4px;
+    color: #4c4035;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    font-family: 'Noto Sans JP', sans-serif;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+}
+
+.playlist-toggle-btn:hover {
+    background-color: rgba(22, 22, 22, 0.05);
+    border-color: var(--lacquer-black);
+}
+
+/* Playlist Drawer Overlay/Sidebar */
+.playlist-drawer {
+    position: absolute;
+    top: 0;
+    right: -100%; /* Hidden on right */
+    width: 100%;
+    height: 100%;
+    background-color: rgba(250, 247, 240, 0.97);
+    border-left: 2px solid var(--wood-border);
+    z-index: 100;
+    padding: 20px;
+    transition: right 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+.playlist-drawer.open {
+    right: 0;
+}
+
+.drawer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--accent-crimson);
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.drawer-header h4 {
+    font-family: 'Sawarabi Mincho', serif;
+    font-size: 1.1rem;
+    color: var(--lacquer-black);
+}
+
+.drawer-close {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #999;
+    transition: color 0.2s ease;
+}
+
+.drawer-close:hover {
+    color: var(--accent-crimson);
+}
+
+.playlist-items {
+    list-style: none;
+    overflow-y: auto;
+    flex-grow: 1;
+    padding-right: 5px;
+}
+
+/* Beautiful custom scrollbar for playlist items */
+.playlist-items::-webkit-scrollbar {
+    width: 4px;
+}
+
+.playlist-items::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.playlist-items::-webkit-scrollbar-thumb {
+    background: #ccc1b0;
+    border-radius: 2px;
+}
+
+.playlist-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    border-radius: 2px;
+    margin-bottom: 4px;
+}
+
+.playlist-item:hover {
+    background-color: rgba(188, 0, 45, 0.05);
+}
+
+.playlist-item.active {
+    background-color: rgba(188, 0, 45, 0.09);
+    border-left: 3px solid var(--accent-crimson);
+}
+
+.playlist-item-title {
+    font-family: 'Sawarabi Mincho', serif;
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: var(--lacquer-black);
+}
+
+.playlist-item-artist {
+    font-size: 0.72rem;
+    color: #666;
+    margin-top: 2px;
+    font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* Right Side Haiku Scroll Card */
+.haiku-card {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    background-color: #fdfaf0;
+    border: 1px solid #e1d8c7;
+    box-shadow: 2px 5px 15px rgba(0, 0, 0, 0.05);
+    padding: 30px 24px;
+    height: 440px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    position: relative;
+    user-select: none;
+    border-radius: 3px;
+}
+
+/* Ribbon decor on top of haiku scroll */
+.haiku-card::before {
+    content: '';
+    position: absolute;
+    right: 50%;
+    top: -5px;
+    transform: translateX(50%);
+    width: 25px;
+    height: 10px;
+    background-color: var(--accent-crimson);
+    border-radius: 1px;
+}
+
+.haiku-jp {
+    font-size: 1.35rem;
+    line-height: 2.2rem;
+    letter-spacing: 0.6rem;
+    color: var(--lacquer-black);
+    margin-left: 20px; /* Space between lines */
+    font-family: 'Sawarabi Mincho', serif;
+}
+
+.haiku-border {
+    height: 100%;
+    width: 1px;
+    background-color: rgba(188, 0, 45, 0.2);
+    margin: 0 15px;
+}
+
+.haiku-author {
+    font-size: 0.82rem;
+    letter-spacing: 0.12rem;
+    color: #4a3d31;
+    font-family: 'Sawarabi Mincho', serif;
+    margin-left: 10px;
+}
+
+.haiku-translation {
+    writing-mode: horizontal-tb;
+    text-orientation: mixed;
+    font-size: 0.72rem;
+    line-height: 1.1rem;
+    color: #7c7267;
+    text-align: center;
+    margin-top: auto;
+    font-family: 'Noto Sans JP', sans-serif;
+    border-top: 1px dashed rgba(0, 0, 0, 0.08);
+    padding-top: 15px;
+    width: 130px; /* Force small column layout */
+}
+
+/* Responsive adjustments */
+@media (max-width: 960px) {
+    .container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        gap: 25px;
+        max-width: 440px;
+    }
+
+    .vertical-title {
+        writing-mode: horizontal-tb;
+        text-orientation: mixed;
+        border-right: none;
+        border-bottom: 2px solid var(--accent-crimson);
+        padding-right: 0;
+        padding-bottom: 12px;
+        height: auto;
+        letter-spacing: 0.4rem;
+        flex-direction: row;
+        font-size: 1.8rem;
+    }
+
+    .vertical-sub {
+        writing-mode: horizontal-tb;
+        margin-top: 0;
+        margin-left: 15px;
+    }
+
+    .haiku-card {
+        writing-mode: vertical-rl;
+        height: auto;
+        padding: 24px;
+        min-height: 380px;
+    }
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+
+    .glass-container {
+        padding: 16px;
+    }
+
+    .disc-section {
+        margin-bottom: 15px;
+    }
+
+    .vinyl-outer {
+        width: 160px;
+        height: 160px;
+    }
+
+    .vinyl-label {
+        width: 64px;
+        height: 64px;
+    }
+
+    .player-controls {
+        gap: 15px;
+    }
+}

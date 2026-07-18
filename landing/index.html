@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>陰陽 禅プレイヤー - Yin Yang Zen Player</title>
+    <!-- Google Fonts: Noto Sans JP for clean text, Sawarabi Mincho for traditional serif, and Kaushan Script for stylized brush -->
+    <link href="https://fonts.googleapis.com/css2?family=Kaushan+Script&family=Noto+Sans+JP:wght@300;400;700&family=Sawarabi+Mincho&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Sakura canvas background for the falling cherry blossom petals -->
+    <canvas id="sakura-canvas"></canvas>
+
+    <!-- Ambient Ambient Traditional Sounds Background SVG Decors -->
+    <div class="ambient-decor left-bamboo">
+        <!-- Vertical bamboo stalk SVG -->
+        <svg viewBox="0 0 100 800" width="100%" height="100%" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="bamboo-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#2d5a27" />
+                    <stop offset="50%" stop-color="#4e8c45" />
+                    <stop offset="100%" stop-color="#1b3f17" />
+                </linearGradient>
+                <linearGradient id="leaf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#6baa5a" />
+                    <stop offset="100%" stop-color="#21471d" />
+                </linearGradient>
+            </defs>
+            <!-- Bamboo stalks -->
+            <rect x="40" y="0" width="16" height="180" fill="url(#bamboo-grad)" rx="3" />
+            <rect x="40" y="185" width="16" height="200" fill="url(#bamboo-grad)" rx="3" />
+            <rect x="40" y="390" width="16" height="190" fill="url(#bamboo-grad)" rx="3" />
+            <rect x="40" y="585" width="16" height="215" fill="url(#bamboo-grad)" rx="3" />
+            
+            <!-- Nodes -->
+            <ellipse cx="48" cy="182.5" rx="10" ry="4" fill="#1b3f17" />
+            <ellipse cx="48" cy="387.5" rx="10" ry="4" fill="#1b3f17" />
+            <ellipse cx="48" cy="582.5" rx="10" ry="4" fill="#1b3f17" />
+            
+            <!-- Leaves -->
+            <path d="M 48 182 C 15 170, 5 130, 0 110 C 15 130, 35 150, 48 182 Z" fill="url(#leaf-grad)" />
+            <path d="M 48 182 C 80 170, 95 140, 100 120 C 85 140, 65 155, 48 182 Z" fill="url(#leaf-grad)" />
+            <path d="M 48 387 C 10 395, 5 430, 0 450 C 15 425, 30 410, 48 387 Z" fill="url(#leaf-grad)" />
+            <path d="M 48 582 C 85 595, 90 630, 95 650 C 80 625, 65 610, 48 582 Z" fill="url(#leaf-grad)" />
+        </svg>
+    </div>
+
+    <div class="ambient-decor right-bamboo">
+        <svg viewBox="0 0 100 800" width="100%" height="100%" preserveAspectRatio="none">
+            <use href="#bamboo-grad" />
+            <!-- Mirror or slightly different bamboo stalk -->
+            <rect x="45" y="0" width="14" height="220" fill="url(#bamboo-grad)" rx="2" />
+            <rect x="45" y="224" width="14" height="180" fill="url(#bamboo-grad)" rx="2" />
+            <rect x="45" y="408" width="14" height="210" fill="url(#bamboo-grad)" rx="2" />
+            <rect x="45" y="622" width="14" height="178" fill="url(#bamboo-grad)" rx="2" />
+            
+            <ellipse cx="52" cy="222" rx="9" ry="3" fill="#1b3f17" />
+            <ellipse cx="52" cy="406" rx="9" ry="3" fill="#1b3f17" />
+            <ellipse cx="52" cy="620" rx="9" ry="3" fill="#1b3f17" />
+            
+            <path d="M 52 222 C 80 210, 95 180, 100 160 C 85 180, 68 195, 52 222 Z" fill="url(#leaf-grad)" />
+            <path d="M 52 406 C 15 420, 5 450, 0 470 C 15 445, 32 430, 52 406 Z" fill="url(#leaf-grad)" />
+            <path d="M 52 620 C 85 635, 90 670, 95 690 C 80 665, 65 650, 52 620 Z" fill="url(#leaf-grad)" />
+        </svg>
+    </div>
+
+    <!-- Big red rising sun in background -->
+    <div class="rising-sun"></div>
+
+    <div class="container">
+        <!-- Vertical Japanese Calligraphy Slogan on Left -->
+        <div class="vertical-title">
+            <span class="jp-char">和</span>
+            <span class="jp-char">敬</span>
+            <span class="jp-char">清</span>
+            <span class="jp-char">寂</span>
+            <div class="vertical-sub">Harmony & Tranquility</div>
+        </div>
+
+        <!-- Main Player & Content Card -->
+        <div class="glass-container">
+            <div class="card-inner">
+                
+                <!-- Samurai Katana Divider at the top -->
+                <div class="katana-wrapper">
+                    <svg viewBox="0 0 500 40" width="100%" height="40px" class="katana-svg">
+                        <defs>
+                            <linearGradient id="blade-metal" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#ffffff" />
+                                <stop offset="30%" stop-color="#e0e0e0" />
+                                <stop offset="50%" stop-color="#9e9e9e" />
+                                <stop offset="70%" stop-color="#555555" />
+                                <stop offset="100%" stop-color="#222222" />
+                            </linearGradient>
+                            <linearGradient id="hilt-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#bc002d" />
+                                <stop offset="50%" stop-color="#000000" />
+                                <stop offset="100%" stop-color="#bc002d" />
+                            </linearGradient>
+                        </defs>
+                        <!-- Stand (Katanakake) shadow/base -->
+                        <path d="M 80 35 L 420 35" stroke="#333" stroke-width="2" />
+                        <path d="M 120 28 L 120 35 M 380 28 L 380 35" stroke="#111" stroke-width="4" stroke-linecap="round" />
+                        
+                        <!-- The Katana Blade -->
+                        <!-- Handle (Tsuka) -->
+                        <rect x="70" y="16" width="70" height="8" fill="url(#hilt-grad)" rx="2" />
+                        <!-- Handle wrapping diamonds (Tsuka-ito) -->
+                        <path d="M 75 16 L 80 24 L 85 16 M 85 16 L 90 24 L 95 16 M 95 16 L 100 24 L 105 16 M 105 16 L 110 24 L 115 16 M 115 16 L 120 24 L 125 16 M 125 16 L 130 24 L 135 16" stroke="#000" stroke-width="1.5" fill="none" />
+                        <!-- Guard (Tsuba) -->
+                        <rect x="140" y="10" width="6" height="20" fill="#d4af37" rx="1" />
+                        <!-- Habaki (collar) -->
+                        <rect x="146" y="16" width="10" height="8" fill="#c5a02c" />
+                        <!-- Blade (Katana body) -->
+                        <path d="M 156 16 L 410 16 C 420 16, 425 17, 430 20 L 415 22 L 156 22 Z" fill="url(#blade-metal)" />
+                        <!-- Hamon (Wave temper line on blade) -->
+                        <path d="M 156 21 Q 170 19, 184 21 T 212 21 T 240 21 T 268 21 T 296 21 T 324 21 T 352 21 T 380 21 T 408 21 L 412 20" stroke="#f4f4f4" stroke-width="0.8" fill="none" opacity="0.8" />
+                    </svg>
+                </div>
+
+                <!-- Player Title Header -->
+                <div class="player-header">
+                    <h2>禅の響き</h2>
+                    <p class="subtitle">ZEN ECHOES LOFI PLAYER</p>
+                </div>
+
+                <!-- Circular Vinyl / Painting display -->
+                <div class="disc-section">
+                    <div class="vinyl-outer" id="vinyl">
+                        <div class="vinyl-grooves"></div>
+                        <div class="vinyl-label">
+                            <div class="vinyl-artwork">
+                                <!-- Minimalist brush cherry branch/mountain style artwork -->
+                                <div class="sun-art"></div>
+                                <div class="mountain-silhouette"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audio Track Meta Information -->
+                <div class="track-info">
+                    <h3 id="track-title" class="track-title">桜の舞 (Sakura Dance)</h3>
+                    <p id="track-artist" class="track-artist">Ambient Traditional Flute & Lofi Beat</p>
+                </div>
+
+                <!-- Audio Element (hidden) -->
+                <audio id="audio-player" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" preload="auto"></audio>
+
+                <!-- Bamboo Styled Progress Slider Container -->
+                <div class="progress-section">
+                    <span class="time-label" id="current-time">0:00</span>
+                    <div class="bamboo-progress-container" id="progress-container">
+                        <div class="bamboo-rail">
+                            <!-- Bamboo joint markers behind the progress -->
+                            <div class="bamboo-joint" style="left: 20%;"></div>
+                            <div class="bamboo-joint" style="left: 40%;"></div>
+                            <div class="bamboo-joint" style="left: 60%;"></div>
+                            <div class="bamboo-joint" style="left: 80%;"></div>
+                        </div>
+                        <div class="bamboo-bar" id="progress-bar"></div>
+                        <!-- Slider pin is a beautiful sakura petal SVG -->
+                        <div class="bamboo-knob" id="progress-knob">
+                            <svg viewBox="0 0 30 30" width="18" height="18">
+                                <path d="M15 3 C15 3, 24 12, 24 18 C24 23, 20 27, 15 27 C10 27, 6 23, 6 18 C6 12, 15 3, 15 3 Z" fill="#ff7da0" />
+                                <path d="M15 3 C15 3, 18 12, 15 25" stroke="#fff" stroke-dasharray="1 2" stroke-width="1" fill="none" opacity="0.6" />
+                            </svg>
+                        </div>
+                    </div>
+                    <span class="time-label" id="duration">0:00</span>
+                </div>
+
+                <!-- Custom Styled Lacquer Controls -->
+                <div class="player-controls">
+                    <button class="ctrl-btn" id="prev-btn" title="Previous Track">
+                        <!-- Left samurai fan or elegant arrow -->
+                        <span class="icon">&#127809;</span>
+                    </button>
+                    <button class="ctrl-btn play-btn" id="play-pause" title="Play / Pause">
+                        <!-- Ink stamp play button -->
+                        <span class="icon" id="play-icon">▶</span>
+                    </button>
+                    <button class="ctrl-btn" id="next-btn" title="Next Track">
+                        <span class="icon">&#127810;</span>
+                    </button>
+                </div>
+
+                <!-- Bottom elements: Volume, Playlist and Quote -->
+                <div class="player-footer">
+                    <!-- Volume under control slider shaped as a bamboo root -->
+                    <div class="volume-container">
+                        <span class="volume-icon">&#128362;</span>
+                        <div class="volume-slider-wrapper" id="volume-wrapper">
+                            <div class="volume-rail"></div>
+                            <div class="volume-bar" id="volume-bar" style="width: 80%;"></div>
+                            <div class="volume-knob" id="volume-knob" style="left: 80%;"></div>
+                        </div>
+                    </div>
+
+                    <button class="playlist-toggle-btn" id="playlist-toggle">
+                        <span class="icon-list">&#9776;</span> 樂譜 Tracks
+                    </button>
+                </div>
+
+                <!-- Playlist Slide-out Drawer (Emakimono scroll themed) -->
+                <div class="playlist-drawer" id="playlist-drawer">
+                    <div class="drawer-header">
+                        <h4>曲目リスト (Playlist)</h4>
+                        <span class="drawer-close" id="drawer-close">&times;</span>
+                    </div>
+                    <ul class="playlist-items" id="playlist-items">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Traditional Haiku Poem on Right -->
+        <div class="haiku-card">
+            <p class="haiku-jp">古池や</p>
+            <p class="haiku-jp">蛙飛び込む</p>
+            <p class="haiku-jp">水の音</p>
+            <div class="haiku-border"></div>
+            <p class="haiku-author">松尾 芭蕉 (Matsuo Bashō)</p>
+            <p class="haiku-translation">
+                An ancient silent pond...<br>
+                A frog leaps into the pond,<br>
+                splash! Silence again.
+            </p>
+        </div>
+    </div>
+
+    <!-- Script loading -->
+    <script src="js/player.js"></script>
+</body>
+</html>

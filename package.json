@@ -1,0 +1,69 @@
+{
+  "name": "mintpy",
+  "version": "5.2.0",
+  "description": "Japanese-inspired desktop music player with local playback and YouTube streaming",
+  "author": "MintPy",
+  "license": "MIT",
+  "main": "app.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.mintpy.app",
+    "productName": "MintPy",
+    "directories": {
+      "output": "dist3"
+    },
+    "files": [
+      "app.js",
+      "preload.js",
+      "src/**/*",
+      "assets/**/*",
+      "!assets/*-chroma.png",
+      "node_modules/**/*",
+      "icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "*.exe"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/mintpy-logo.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "43.1.1",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "music-metadata": "11.14.0"
+  }
+}

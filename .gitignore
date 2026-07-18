@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist2/
+dist3/
+dist4/
+dist_build/
+*.log
+assets/*-chroma.png
+.DS_Store

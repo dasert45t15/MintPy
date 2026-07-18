@@ -1,0 +1,39 @@
+name: Build Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer and portable app
+        run: npm run dist
+
+      - name: Upload Windows builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: MintPy-Windows
+          path: |
+            dist3/MintPy Setup *.exe
+            dist3/MintPy *.exe
+          if-no-files-found: error
