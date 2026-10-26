@@ -7,4 +7,9 @@ bin/
 scratch/
 tools/
 build_android/
+*.docx
+PROJECT_DOSSIER.md
+GEMINI.md
+ROADMAP.md
+scripts/generate_project_doc.py
 
