@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; media-src http://127.0.0.1:3737; connect-src http://127.0.0.1:3737;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: blob: cover:; media-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*; connect-src 'self' data: blob: https: http://127.0.0.1:* http://localhost:*;">
   <title>MintPy — Zen audio player</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,6 +32,9 @@
     <symbol id="ico-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="ico-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="ico-maximize" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></symbol>
+    <symbol id="ico-lyrics" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></symbol>
+    <symbol id="ico-ambient" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 21 2c-1 5-2 6.5-3.1 12.2A7 7 0 0 1 11 20Z"/><path d="m2 22 10-10"/></symbol>
+    <symbol id="ico-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
   </svg>
 
   <div id="app" class="app-window">
@@ -41,33 +44,240 @@
     <div class="ink-mountain ink-mountain-right" aria-hidden="true"></div>
     <header class="titlebar">
       <div class="drag-bar"></div>
-      <div class="title-brand"><img class="brand-logo" src="../assets/mintpy-logo.png" alt=""><span>MintPy</span><small>静かな音</small></div>
+      <div class="title-brand"><img class="brand-logo" src="../assets/mintpy-logo.png" alt=""><span>MintPy</span><small id="titleSmall">静かな音</small><small class="player-tag" id="playerTag">朱に交わる</small></div>
       <div class="katana-header" aria-hidden="true">
-        <svg viewBox="0 0 560 24" preserveAspectRatio="none">
+        <svg class="hd hd-zen" viewBox="0 0 560 24" preserveAspectRatio="none">
           <defs><linearGradient id="blade" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff"/><stop offset=".45" stop-color="#c9c5bd"/><stop offset="1" stop-color="#5d5a54"/></linearGradient></defs>
           <rect x="34" y="9" width="74" height="7" rx="2" fill="#2a2420"/><path d="m39 9 8 7m4-7 8 7m4-7 8 7m4-7 8 7m4-7 8 7" stroke="#a01f2c"/>
           <rect x="108" y="5" width="7" height="15" rx="2" fill="#af873e"/><path d="M115 9h402q13 0 23 4l-23 4H115Z" fill="url(#blade)"/>
+        <svg class="hd hd-lofi" viewBox="0 0 560 24" preserveAspectRatio="xMidYMid meet" fill="none" stroke="currentColor">
+          <path d="M20 12h196 M344 12h196" stroke-width="1.2" opacity="0.35"/>
+          <g stroke-width="1.3" opacity="0.6">
+            <path d="M50 10v4 M70 8v8 M90 9v6 M110 7v10 M130 9v6 M150 6v12 M170 8v8 M190 9v6 M210 10v4"/>
+            <path d="M350 10v4 M370 9v6 M390 8v8 M410 6v12 M430 9v6 M450 7v10 M470 9v6 M490 8v8 M510 10v4"/>
+          </g>
+          <g class="cassette-body">
+            <rect x="224" y="2" width="112" height="20" rx="3" stroke-width="1.6"/>
+            <path d="M246 22 L252 18 H308 L314 22" stroke-width="1.2" opacity="0.8"/>
+            <circle cx="228" cy="5" r="0.8" fill="currentColor" stroke="none"/>
+            <circle cx="332" cy="5" r="0.8" fill="currentColor" stroke="none"/>
+            <circle cx="228" cy="19" r="0.8" fill="currentColor" stroke="none"/>
+            <circle cx="332" cy="19" r="0.8" fill="currentColor" stroke="none"/>
+            <rect x="236" y="4" width="88" height="15" rx="1.5" stroke-width="0.9" opacity="0.65"/>
+            <rect x="254" y="6.5" width="52" height="10.5" rx="2" stroke-width="1.1" fill="rgba(0,0,0,0.18)"/>
+            <g class="reel reel-l">
+              <circle cx="266" cy="11.75" r="4.2" stroke-width="1"/>
+              <path d="M266 7.8v2.2 M266 13.5v2.2 M262 11.75h2.2 M267.8 11.75h2.2" stroke-width="1"/>
+              <circle cx="266" cy="11.75" r="1.4" fill="currentColor" stroke="none"/>
+            </g>
+            <g class="reel reel-r">
+              <circle cx="294" cy="11.75" r="4.2" stroke-width="1"/>
+              <path d="M294 7.8v2.2 M294 13.5v2.2 M290 11.75h2.2 M295.8 11.75h2.2" stroke-width="1"/>
+              <circle cx="294" cy="11.75" r="1.4" fill="currentColor" stroke="none"/>
+            </g>
+          </g>
+        </svg>
+        <svg class="hd hd-synthwave" viewBox="0 0 560 24" preserveAspectRatio="none" fill="none">
+          <path d="M0 12h560" stroke="#ff2d95" stroke-width=".7" opacity=".5"/>
+          <g class="hd-sun" stroke="none">
+            <circle cx="36" cy="12" r="9" fill="url(#hsw-sun)"/>
+            <defs><linearGradient id="hsw-sun" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffb347"/><stop offset="1" stop-color="#ff2d95"/></linearGradient></defs>
+            <path d="M28 9h16M27 14h18M30 19h12" stroke="#12081c" stroke-width="2"/>
+          </g>
+          <g stroke="#2de2e6" stroke-width="1" opacity=".8" class="hd-perspective">
+            <path d="M60 22 120 2M100 22 160 2M140 22 200 2M180 22 240 2"/>
+            <path d="M60 2l60 20M100 2l60 20M140 2l60 20M180 2l60 20"/>
+          </g>
+          <text x="260" y="16" font-family="'Noto Sans JP', sans-serif" font-weight="700" font-size="12" letter-spacing="6" fill="#ff2d95" stroke="none" class="hd-neon-text">MINTPY</text>
+          <g stroke="#ff2d95" stroke-width="1" opacity=".7" class="hd-perspective2">
+            <path d="M420 22 480 2M460 22 520 2M500 22 560 2"/>
+            <path d="M420 2l60 20M460 2l60 20M500 2l60 20"/>
+          </g>
+        </svg>
+        <svg class="hd hd-aurora" viewBox="0 0 560 24" preserveAspectRatio="none" fill="none">
+          <g class="hd-wave">
+            <path d="M0 14C60 4 120 20 180 10s120-12 180-2 120 10 200 0" stroke="#00c9c8" stroke-width="3" stroke-linecap="round" opacity=".55" filter="url(#hau-b)"/>
+          </g>
+          <g class="hd-wave2">
+            <path d="M0 10C70 20 130 4 200 14s130 8 180 0 120 6 180 2" stroke="#6c63ff" stroke-width="2.4" stroke-linecap="round" opacity=".45" filter="url(#hau-b)"/>
+          </g>
+          <g class="hd-wave3">
+            <path d="M0 18C80 8 140 22 220 12s140-6 190 2 90 4 150 0" stroke="#7ee8fa" stroke-width="1.6" stroke-linecap="round" opacity=".4" filter="url(#hau-b)"/>
+          </g>
+          <defs><filter id="hau-b" x="-10%" y="-100%" width="120%" height="300%"><feGaussianBlur stdDeviation="2.2"/></filter></defs>
+          <g fill="#7ee8fa" class="hd-stars"><circle cx="40" cy="5" r="1"/><circle cx="150" cy="4" r=".8"/><circle cx="320" cy="6" r="1.1"/><circle cx="480" cy="4" r=".9"/></g>
+        </svg>
+        <svg class="hd hd-ocean" viewBox="0 0 560 24" preserveAspectRatio="none" fill="none" stroke="currentColor">
+          <path d="M20 12 Q40 4 60 12 T100 12 T140 12" stroke-width="2" opacity=".6"/><path d="M180 12 Q200 20 220 12 T260 12 T300 12" stroke-width="2" opacity=".4"/><circle cx="480" cy="12" r="6" stroke-width="2"/><circle cx="480" cy="12" r="2" fill="currentColor"/><path d="M500 12h40" stroke-width="2" opacity=".3"/>
+        </svg>
+        <svg class="hd hd-forest" viewBox="0 0 560 24" preserveAspectRatio="none" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <g class="hd-pine-l" opacity=".85">
+            <path d="M12 20 C32 16, 56 14, 84 10"/>
+            <path d="M26 18 l-6-8 M36 16 l-4-9 M48 14 l-3-9 M62 12 l-2-9 M76 11 l-1-8"/>
+            <path d="M30 18 l8 6 M44 16 l7 6 M58 13 l6 5"/>
+          </g>
+          <g class="hd-ferns" opacity=".45">
+            <path d="M130 18 Q150 10 170 14 T210 12"/>
+            <path d="M250 14 Q280 8 310 13 T360 11"/>
+          </g>
+          <g class="hd-fireflies" fill="#9ef01a" stroke="none">
+            <circle cx="225" cy="8" r="1.5" opacity=".7"/>
+            <circle cx="380" cy="13" r="1.8" opacity=".8"/>
+            <circle cx="435" cy="7" r="1.3" opacity=".6"/>
+          </g>
+          <g class="hd-pine-r" opacity=".85">
+            <path d="M548 20 C528 16, 504 14, 476 10"/>
+            <path d="M534 18 l6-8 M524 16 l4-9 M512 14 l3-9 M498 12 l2-9 M484 11 l1-8"/>
+            <path d="M530 18 l-8 6 M516 16 l-7 6 M502 13 l-6 5"/>
+          </g>
         </svg>
       </div>
       <div class="win-btns">
         <button class="wb" id="winMin" aria-label="Minimize"><svg class="ico"><use href="#ico-minus"/></svg></button>
         <button class="wb" id="winMax" aria-label="Maximize"><svg class="ico"><use href="#ico-maximize"/></svg></button>
-        <button class="wb close" id="winClose" aria-label="Close"><svg class="ico"><use href="#ico-close"/></svg></button>
+        <button class="wb close" id="winClose" aria-label="Hide to tray" title="Hide to tray"><svg class="ico"><use href="#ico-close"/></svg></button>
       </div>
     </header>
 
     <div class="grid">
       <aside class="sidebar panel">
-        <div class="brand-block"><img class="sidebar-logo" src="../assets/mintpy-logo.png" alt=""><span class="brand-jp">音の間</span><h1>MintPy</h1><p>ZEN AUDIO PLAYER</p></div>
+        <div class="brand-block"><img class="sidebar-logo" src="../assets/mintpy-logo.png" alt=""><span class="brand-jp" id="brandJp">音の間</span><h1>MintPy</h1><p>ZEN AUDIO PLAYER</p></div>
         <nav aria-label="Main navigation">
           <button class="nav-btn active" data-view="home"><svg class="ico"><use href="#ico-home"/></svg><span>Home<small>ホーム</small></span></button>
           <button class="nav-btn" data-view="search"><svg class="ico"><use href="#ico-search"/></svg><span>Search<small>検索</small></span></button>
+          <button class="nav-btn" data-view="history"><svg class="ico"><use href="#ico-playlist"/></svg><span>Recent<small>recent</small></span></button>
           <button class="nav-btn" data-view="favorites"><svg class="ico"><use href="#ico-heart"/></svg><span>Favorites<small>お気に入り</small></span></button>
           <button class="nav-btn" data-view="playlists"><svg class="ico"><use href="#ico-playlist"/></svg><span>Playlists<small>再生リスト</small></span></button>
           <button class="nav-btn" data-view="library"><svg class="ico"><use href="#ico-folder"/></svg><span>Library<small>音楽庫</small></span></button>
           <button class="nav-btn settings-link" data-view="settings"><svg class="ico"><use href="#ico-settings"/></svg><span>Settings<small>設定</small></span></button>
         </nav>
-        <blockquote><span>古池や<br>蛙飛びこむ<br>水の音</span><small>— 松尾芭蕉</small></blockquote>
+        <blockquote id="styleQuote"><span>古池や<br>蛙飛びこむ<br>水の音</span><small>— 松尾芭蕉</small></blockquote>
+        <div class="side-deco" aria-hidden="true">
+          <div class="deco deco-lofi">
+            <svg viewBox="0 0 170 110" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <g class="steam">
+                <path d="M55 38c-4-4 4-8 0-13"/>
+                <path d="M67 40c-4-4 4-8 0-13"/>
+              </g>
+              <path d="M44 44h34v20a9 9 0 0 1-9 9H53a9 9 0 0 1-9-9V44Z"/>
+              <path d="M78 48h6a7 7 0 0 1 0 14h-6"/>
+              <path d="M46 60h30" opacity=".5"/>
+              <ellipse cx="61" cy="82" rx="30" ry="4" opacity=".3"/>
+              <g class="vinyl" opacity=".75">
+                <circle cx="128" cy="56" r="24"/>
+                <circle cx="128" cy="56" r="17" stroke-dasharray="3 3" stroke-width="1.4"/>
+                <circle cx="128" cy="56" r="11" stroke-dasharray="2 3" stroke-width="1.2"/>
+                <circle cx="128" cy="56" r="4" fill="currentColor" stroke="none"/>
+              </g>
+              <g class="tonearm" stroke-width="2">
+                <path d="M150 34v10l-8 12"/>
+                <circle cx="150" cy="32" r="3"/>
+              </g>
+              <g class="notes" opacity=".85">
+                <path d="M96 72V56l12-4v14"/>
+                <circle cx="93" cy="73" r="3.6"/>
+                <circle cx="105" cy="67" r="3.6"/>
+              </g>
+              <g class="zzz" stroke-width="1.8" opacity=".7">
+                <path d="M110 30h9l-9 10h9"/>
+              </g>
+            </svg>
+          </div>
+          <div class="deco deco-synthwave">
+            <svg viewBox="0 0 170 110" fill="none">
+              <defs>
+                <linearGradient id="sw-sun" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#ffb347"/>
+                  <stop offset=".55" stop-color="#ff2d95"/>
+                  <stop offset="1" stop-color="#b14aed"/>
+                </linearGradient>
+                <linearGradient id="sw-grid" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#2de2e6" stop-opacity=".7"/>
+                  <stop offset="1" stop-color="#ff2d95" stop-opacity=".25"/>
+                </linearGradient>
+              </defs>
+              <g class="scanlines" stroke="#ff2d95" stroke-width=".6" opacity=".25">
+                <path d="M0 14h170M0 20h170M0 26h170"/>
+              </g>
+              <circle cx="85" cy="42" r="27" fill="url(#sw-sun)"/>
+              <g class="sun-stripes" stroke="#1b0f2e" stroke-width="4">
+                <path d="M58 38h54"/>
+                <path d="M61 47h48"/>
+                <path d="M66 56h38"/>
+                <path d="M74 63h22"/>
+              </g>
+              <g stroke="url(#sw-grid)" stroke-width="1.2" opacity=".85">
+                <path d="M0 78h170M0 88h170M0 98h170" class="grid-h"/>
+                <path d="M20 78 6 110M45 78l-9 32M70 78v32M95 78v32M120 78l9 32M145 78l14 32" class="grid-v"/>
+              </g>
+              <g class="palms" stroke="#ff2d95" stroke-width="1.6" opacity=".75">
+                <path d="M24 76V52"/>
+                <path d="M24 54c-7-2-12-7-13-13M24 54c7-2 12-7 13-13M24 52c-2-6-1-11 1-15M24 52c2-6 1-11-1-15"/>
+              </g>
+              <g class="palms palms2" stroke="#b14aed" stroke-width="1.4" opacity=".6">
+                <path d="M146 76V56"/>
+                <path d="M146 58c-6-2-10-6-11-11M146 58c6-2 10-6 11-11M146 56c-1-5 0-9 1-12"/>
+              </g>
+            </svg>
+          </div>
+          <div class="deco deco-aurora">
+            <svg viewBox="0 0 170 110" fill="none">
+              <defs><filter id="au-blur" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="5"/></filter></defs>
+              <g class="ribbon">
+                <path d="M8 74C40 36 70 84 100 44s42-30 62-14" stroke="#00c9c8" stroke-width="14" stroke-linecap="round" opacity=".35" filter="url(#au-blur)"/>
+              </g>
+              <g class="ribbon ribbon2">
+                <path d="M4 88C36 56 72 96 104 58s40-22 62-8" stroke="#6c63ff" stroke-width="10" stroke-linecap="round" opacity=".3" filter="url(#au-blur)"/>
+              </g>
+              <g class="ribbon ribbon3">
+                <path d="M12 60C44 32 80 70 112 38s34-24 54-12" stroke="#7ee8fa" stroke-width="6" stroke-linecap="round" opacity=".25" filter="url(#au-blur)"/>
+              </g>
+              <g class="peaks" stroke="#9aa3c0" stroke-width="1.6" stroke-linejoin="round" opacity=".8">
+                <path d="m34 96 22-30 22 30" fill="none"/>
+                <path d="m66 96 26-36 26 36" fill="none"/>
+                <path d="m102 96 18-24 18 24" fill="none"/>
+                <path d="M56 76l6-5 5 5M84 70l7-6 6 6" stroke-width="1.2" opacity=".9"/>
+              </g>
+              <path d="M0 96h170" stroke="#9aa3c0" opacity=".35"/>
+              <g fill="#e8ebf7">
+                <circle cx="26" cy="20" r="1.6" class="star"/>
+                <circle cx="84" cy="12" r="1.3" class="star star2"/>
+                <circle cx="140" cy="26" r="1.8" class="star"/>
+                <circle cx="112" cy="16" r="1.1" class="star star2"/>
+                <circle cx="58" cy="26" r="1" class="star"/>
+              </g>
+            </svg>
+          </div>
+
+          <div class="deco deco-ocean">
+            <svg viewBox="0 0 170 110" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M 50 40 C 50 10, 110 10, 110 40" stroke-width="2.5" opacity="0.9"/><path d="M 50 40 C 50 10, 110 10, 110 40 C 110 50, 50 50, 50 40 Z" fill="currentColor" opacity="0.15" stroke="none"/><path d="M 60 40 Q 50 70, 70 90" stroke-width="1.5" opacity="0.7"/><path d="M 80 40 Q 90 70, 75 95" stroke-width="1.5" opacity="0.5"/><path d="M 100 40 Q 110 60, 95 85" stroke-width="1.5" opacity="0.8"/><circle cx="30" cy="30" r="4" opacity="0.4"/><circle cx="40" cy="15" r="2" opacity="0.6"/><circle cx="130" cy="50" r="3" opacity="0.5"/>
+            </svg>
+          </div>
+          <div class="deco deco-forest">
+            <svg viewBox="0 0 170 110" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <g class="forest-pines">
+                <!-- Large pine -->
+                <path d="M48 104V48"/>
+                <path d="M48 54 l-18 14 h12 l-16 14 h14 l-18 16 h56 l-18-16 h14 l-16-14 h12 L48 54"/>
+                <!-- Small pine -->
+                <path d="M116 104V64"/>
+                <path d="M116 68 l-14 11 h9 l-13 12 h36 l-13-12 h9 L116 68"/>
+              </g>
+              <g class="forest-ferns" opacity=".7" stroke-width="1.6">
+                <path d="M72 104 C74 92, 80 84, 88 80"/>
+                <path d="M76 96 l4-3 M80 90 l5-3 M84 84 l4-2"/>
+              </g>
+              <g fill="#9ef01a" stroke="none">
+                <circle class="firefly" cx="86" cy="50" r="2.2"/>
+                <circle class="firefly firefly2" cx="140" cy="65" r="1.8"/>
+                <circle class="firefly" cx="22" cy="70" r="1.6"/>
+                <circle class="firefly firefly2" cx="102" cy="85" r="2"/>
+              </g>
+              <path d="M8 104h154" opacity=".35"/>
+            </svg>
+          </div>
+        </div>
       </aside>
 
       <main class="content" id="viewRoot">
@@ -75,7 +285,7 @@
       </main>
 
       <aside class="queue panel">
-        <div class="section-heading"><span><small>NEXT</small> Up next</span><b>次</b></div>
+        <div class="section-heading"><span><small>NEXT</small> Up next</span><b id="queueBadge">次</b></div>
         <div id="queueList" class="queue-list"></div>
       </aside>
 
@@ -98,10 +308,219 @@
             <span id="totTime" class="time-lbl">0:00</span>
           </div>
         </div>
-        <div class="np-volume"><svg class="ico"><use href="#ico-volume"/></svg><div class="vol-bar" id="volBar"><div class="vol-fill" id="volFill"></div></div><span class="volume-label">音量</span></div>
+        <div class="np-volume">
+          <div class="bar-tools">
+            <button class="icon-btn" id="lyricsBtn" title="Lyrics / Текст песни (Караоке)"><svg class="ico"><use href="#ico-lyrics"/></svg></button>
+            <button class="icon-btn" id="ambientBtn" title="Atmosphere / Звуки природы"><svg class="ico"><use href="#ico-ambient"/></svg></button>
+            <button class="icon-btn" id="sleepTimerBtn" title="Sleep Timer / Таймер сна"><svg class="ico"><use href="#ico-moon"/></svg><span id="sleepTimerBadge" class="timer-badge"></span></button>
+          </div>
+          <svg class="ico"><use href="#ico-volume"/></svg>
+          <div class="vol-bar" id="volBar"><div class="vol-fill" id="volFill"></div></div>
+          <span class="volume-label" id="volumeLabel">音量</span>
+        </div>
       </footer>
     </div>
+
+    <!-- MintPy Zen Setup Overlay (Custom First-Run & Reconfiguration Wizard) -->
+    <div id="mintpy-setup-overlay" class="setup-overlay hidden" aria-modal="true" role="dialog">
+      <div class="installer-window" id="setupWindowCard">
+        <!-- Left Column: Showcase & Rotating Vinyl -->
+        <aside class="left-showcase">
+          <div class="showcase-top">
+            <div class="setup-brand">
+              <img class="setup-logo" src="../assets/mintpy-logo.png" alt="MintPy">
+              <div class="setup-brand-meta">
+                <span class="setup-brand-title">🌿 MintPy</span>
+                <span class="setup-version-badge">v5.3.8</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="showcase-center">
+            <div class="setup-vinyl-stage">
+              <div class="setup-vinyl-disc" id="setupVinylDisc" aria-hidden="true">
+                <div class="setup-vinyl-grooves"></div>
+                <div class="setup-vinyl-sheen"></div>
+                <div class="setup-vinyl-label" id="setupVinylLabel">
+                  <span class="setup-label-icon" id="setupLabelIcon">🎋</span>
+                </div>
+                <div class="setup-vinyl-hole"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="showcase-bottom">
+            <p class="showcase-slogan">«Оставь шум за пределами экрана»</p>
+            <div class="step-dots" id="setupStepDots">
+              <span class="step-dot active" data-step="1"></span>
+              <span class="step-dot" data-step="2"></span>
+              <span class="step-dot" data-step="3"></span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Right Column: Interactive Wizard Steps -->
+        <section class="right-content">
+          <!-- Step 1: Personalization & Options -->
+          <div class="setup-step active" id="setupStep1">
+            <div class="step-header">
+              <span class="step-eyebrow">Шаг 1 из 3 · Настройка атмосферы</span>
+              <h2 class="step-title">Добро пожаловать в MintPy</h2>
+              <p class="step-desc">Выберите визуальную эстетику и параметры первого запуска:</p>
+            </div>
+
+            <div class="styles-grid" id="setupStylesGrid">
+              <button type="button" class="setup-style-card active" data-style="zen">
+                <span class="style-icon">🎋</span>
+                <div class="style-card-text">
+                  <span class="style-card-name">Zen</span>
+                  <span class="style-card-hint">Сад камней и сакура</span>
+                </div>
+              </button>
+              <button type="button" class="setup-style-card" data-style="lofi">
+                <span class="style-icon">☕</span>
+                <div class="style-card-text">
+                  <span class="style-card-name">Lo-Fi</span>
+                  <span class="style-card-hint">Уютный кофе и плед</span>
+                </div>
+              </button>
+              <button type="button" class="setup-style-card" data-style="synthwave">
+                <span class="style-icon">🌆</span>
+                <div class="style-card-text">
+                  <span class="style-card-name">Synthwave</span>
+                  <span class="style-card-hint">Неоновый ретро-закат</span>
+                </div>
+              </button>
+              <button type="button" class="setup-style-card" data-style="ocean">
+                <span class="style-icon">🌊</span>
+                <div class="style-card-text">
+                  <span class="style-card-name">Ocean</span>
+                  <span class="style-card-hint">Морские глубины</span>
+                </div>
+              </button>
+              <button type="button" class="setup-style-card" data-style="forest">
+                <span class="style-icon">🌲</span>
+                <div class="style-card-text">
+                  <span class="style-card-name">Forest</span>
+                  <span class="style-card-hint">Ночной лес и светлячки</span>
+                </div>
+              </button>
+              <button type="button" class="setup-style-card" data-style="aurora">
+                <span class="style-icon">✨</span>
+                <div class="style-card-text">
+                  <span class="style-card-name">Aurora</span>
+                  <span class="style-card-hint">Северное сияние</span>
+                </div>
+              </button>
+            </div>
+
+            <div class="setup-options-row">
+              <div class="setup-theme-switch">
+                <span class="option-label">Тема оформления:</span>
+                <div class="theme-pills" id="setupThemePills">
+                  <button type="button" class="theme-pill active" data-theme="dark">Тёмная</button>
+                  <button type="button" class="theme-pill" data-theme="light">Светлая</button>
+                </div>
+              </div>
+
+              <div class="setup-checkboxes">
+                <label class="custom-checkbox">
+                  <input type="checkbox" id="setupShortcutCheck" checked>
+                  <span class="checkbox-box"></span>
+                  <span class="checkbox-text">Ярлык на Рабочем столе</span>
+                </label>
+                <label class="custom-checkbox">
+                  <input type="checkbox" id="setupAmbientCheck">
+                  <span class="checkbox-box"></span>
+                  <span class="checkbox-text">Включить шум дождя при старте</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="step-footer">
+              <div class="setup-path-badge" title="Локальная портативная директория">
+                <span class="badge-dot"></span>
+                <span class="badge-text">Быстрая доставка NSIS завершена</span>
+              </div>
+              <button type="button" class="setup-btn primary-btn" id="setupToStep2Btn">
+                <span>Продолжить</span>
+                <svg class="btn-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 2: Initialization & Unpacking Zen -->
+          <div class="setup-step" id="setupStep2">
+            <div class="step-header">
+              <span class="step-eyebrow">Шаг 2 из 3 · Инициализация</span>
+              <h2 class="step-title">Настройка окружения</h2>
+              <p class="step-desc">Подготовка аудио-ядра, шейдеров частиц и локальных хранилищ:</p>
+            </div>
+
+            <div class="setup-init-stage">
+              <div class="progress-container">
+                <div class="progress-bar-bg">
+                  <div class="setup-progress-bar" id="setupProgressBar"></div>
+                </div>
+                <div class="progress-meta">
+                  <span class="progress-status-text" id="setupProgressStatus">Инициализация аудио-ядра...</span>
+                  <span class="progress-percent" id="setupProgressPercent">0%</span>
+                </div>
+              </div>
+
+              <div class="setup-terminal-log" id="setupTerminalLog">
+                <div class="log-line active">&gt; Запуск модуля быстрой установки MintPy...</div>
+              </div>
+            </div>
+
+            <div class="step-footer single-action">
+              <span class="setup-wait-note">Пожалуйста, подождите завершения настройки...</span>
+            </div>
+          </div>
+
+          <!-- Step 3: Complete / Ready to Dive In -->
+          <div class="setup-step" id="setupStep3">
+            <div class="step-header">
+              <span class="step-eyebrow">Шаг 3 из 3 · Всё настроено</span>
+              <h2 class="step-title">MintPy готов к погружению ✨</h2>
+              <p class="step-desc">Ваше индивидуальное пространство для фокусировки создано:</p>
+            </div>
+
+            <div class="setup-summary-card">
+              <div class="summary-item">
+                <span class="summary-check">✓</span>
+                <span class="summary-label">Аудио-ядро Web Audio &amp; HTML5 Deck активно</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-check">✓</span>
+                <span class="summary-label" id="summaryThemeLabel">Применена атмосфера: Zen (Тёмная)</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-check">✓</span>
+                <span class="summary-label">Аппаратное ускорение Canvas-частиц сакуры включено</span>
+              </div>
+              <div class="summary-item">
+                <span class="summary-check">✓</span>
+                <span class="summary-label">Интеграция стриминга YouTube Innertube и плейлистов</span>
+              </div>
+            </div>
+
+            <div class="step-footer single-action">
+              <button type="button" class="setup-btn launch-btn" id="setupFinishBtn">
+                <span>Запустить MintPy 🎧</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
   </div>
+  <script src="mobile-bridge.js"></script>
+  <script src="pets.js"></script>
+  <script src="lyrics.js"></script>
+  <script src="ambient.js"></script>
+  <script src="sleep-timer.js"></script>
   <script src="main.js"></script>
+  <script src="sakura.js"></script>
 </body>
 </html>
