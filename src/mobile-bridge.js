@@ -647,7 +647,15 @@
       const customs = getLocalJson('mintpy_custom_pets', []);
       const found = customs.find(p => p.id === id || p.id === 'custom:' + id);
       return found?.dataUrl || '';
-    }
+    },
+
+    setDiscordActivity: async () => {},
+    setDiscordEnabled: async () => {},
+    getPathForFile: (file) => file?.path || '',
+    importDroppedFiles: async () => [],
+    setMiniMode: async () => false,
+    getMiniMode: async () => false,
+    onMiniModeChange: () => () => {}
   };
 
   setupMediaSession();

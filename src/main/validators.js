@@ -29,7 +29,7 @@ function defaultSettings() {
     accentColor: 'blue-purple', customColor: '', cornerRadius: 30, keybinds: {},
     style: 'zen', pet: '', petSize: 96, petPos: null,
     volumeNormalize: false, eqBands: { low: 0, mid: 0, high: 0 }, crossfadeSeconds: 0,
-    setupCompleted: false
+    setupCompleted: false, discordRpcEnabled: true
   };
 }
 
@@ -45,6 +45,9 @@ function validateSettings(raw) {
     else if (key === 'crossfadeSeconds') result[key] = number(value, key, 0, 12);
     else if (key === 'setupCompleted') {
       if (typeof value !== 'boolean') throw new TypeError('setupCompleted must be boolean');
+      result[key] = value;
+    } else if (key === 'discordRpcEnabled') {
+      if (typeof value !== 'boolean') throw new TypeError('discordRpcEnabled must be boolean');
       result[key] = value;
     } else if (key === 'compactMode') {
       if (typeof value !== 'boolean') throw new TypeError('compactMode must be boolean');

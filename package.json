@@ -69,6 +69,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "discord-rpc": "^4.0.1",
     "music-metadata": "11.14.0"
   }
 }

@@ -465,6 +465,35 @@ function bindUI() {
   $('#winMin').onclick = () => bridge.win('minimize');
   $('#winMax').onclick = () => bridge.win('maximize');
   $('#winClose').onclick = () => bridge.win('close');
+  const winMini = $('#winMini');
+  if (winMini) winMini.onclick = () => bridge.setMiniMode(true);
+  const miniBtnRestore = $('#miniBtnRestore');
+  if (miniBtnRestore) miniBtnRestore.onclick = () => bridge.setMiniMode(false);
+  const miniBtnClose = $('#miniBtnClose');
+  if (miniBtnClose) miniBtnClose.onclick = () => bridge.win('close');
+  const miniBtnPlay = $('#miniBtnPlay');
+  if (miniBtnPlay) miniBtnPlay.onclick = () => togglePlay();
+  const miniBtnPrev = $('#miniBtnPrev');
+  if (miniBtnPrev) miniBtnPrev.onclick = () => prevTrack();
+  const miniBtnNext = $('#miniBtnNext');
+  if (miniBtnNext) miniBtnNext.onclick = () => nextTrack();
+  const miniProg = $('#miniProgressWrap');
+  if (miniProg) {
+    miniProg.onclick = (e) => {
+      if (!audio.duration || !isFinite(audio.duration)) return;
+      const rect = miniProg.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      audio.currentTime = pos * audio.duration;
+      syncMiniPlayer();
+    };
+  }
+  if (bridge.onMiniModeChange) {
+    bridge.onMiniModeChange((isMini) => {
+      document.body.classList.toggle('mini-mode', Boolean(isMini));
+      syncMiniPlayer();
+    });
+  }
+  initDragAndDrop();
   const lBtn = $('#lyricsBtn');
   if (lBtn) lBtn.onclick = () => window.mintpyLyrics?.toggle();
   const ambBtn = $('#ambientBtn');
@@ -910,6 +939,14 @@ function renderSettings() {
       <p class="muted" style="font-size:12px;margin-top:8px;">Click a shortcut then press new key — Ctrl/Alt/Shift combos supported (Mute works even in other apps). Defaults: Space, M for mute</p>
     </div>
     <div class="settings-group">
+      <h3>Discord Rich Presence</h3>
+      <div class="setting-row">
+        <label>Статус активности в Discord (трек, автор, таймлайн)</label>
+        <div class="toggle-switch ${s.discordRpcEnabled !== false ? 'active' : ''}" id="setDiscordRpc" role="switch" aria-checked="${Boolean(s.discordRpcEnabled !== false)}"></div>
+      </div>
+      <p class="muted" style="font-size:11px;margin:0 0 8px;">Отображает в вашем профиле Discord играющий трек, обложку и таймлайн.</p>
+    </div>
+    <div class="settings-group">
       <h3>${icon('settings')} Master Setup</h3>
       <div class="setting-row">
         <label>Мастер первого запуска (Zen Setup Wizard)</label>
@@ -921,6 +958,18 @@ function renderSettings() {
   const cur = { ...s };
 
   renderKeybinds(cur);
+  const setDiscordRpc = $('#setDiscordRpc');
+  if (setDiscordRpc) {
+    setDiscordRpc.onclick = function() {
+      cur.discordRpcEnabled = cur.discordRpcEnabled === false ? true : false;
+      this.classList.toggle('active', cur.discordRpcEnabled);
+      this.setAttribute('aria-checked', String(cur.discordRpcEnabled));
+      applySettings(cur);
+      debounceSave(cur);
+      bridge.setDiscordEnabled?.(cur.discordRpcEnabled);
+      updateDiscordPresence();
+    };
+  }
   const openSetupBtn = $('#openSetupWizardBtn');
   if (openSetupBtn) openSetupBtn.onclick = () => initSetupWizard(uiSettings);
 
@@ -1147,6 +1196,7 @@ function updateTimelineUI() {
   if (homeFill) homeFill.style.width = percent + '%';
   if (homeCurrent) homeCurrent.textContent = fmt(audio.currentTime);
   if (homeTotal) homeTotal.textContent = hasDuration ? fmt(duration) : '--:--';
+  syncMiniPlayer();
 }
 
 function syncHomePlayer() {
@@ -1561,6 +1611,8 @@ function updateUI() {
     seekBar.style.cursor = 'default';
     renderQueue(); syncHomePlayer(); updatePetState();
     if (window.updateMobileMediaSession) window.updateMobileMediaSession(null, false);
+    syncMiniPlayer();
+    updateDiscordPresence();
     return;
   }
   npArt.src = safeArtwork(currentTrack.artwork);
@@ -1576,6 +1628,8 @@ function updateUI() {
   updatePetState();
   if (window.updateMobileMediaSession) window.updateMobileMediaSession(currentTrack, isPlaying);
   window.mintpyLyrics?.onTrackChange(currentTrack);
+  syncMiniPlayer();
+  updateDiscordPresence();
 }
 
 function renderQueue() {
@@ -1599,3 +1653,129 @@ function renderQueue() {
 function playTrackFromQueue(idx) { playTrack(queue[idx], idx); }
 
 function fmt(s) { if (!s) return '0:00'; const m = Math.floor(s/60), sec = Math.floor(s%60); return `${m}:${sec<10?'0':''}${sec}`; }
+
+// ==================== MINI-PLAYER ====================
+function syncMiniPlayer() {
+  const miniTitle = $('#miniTitle');
+  const miniArtist = $('#miniArtist');
+  const miniCover = $('#miniCover');
+  const miniProgressFill = $('#miniProgressFill');
+  const miniTime = $('#miniTime');
+  const miniBtnPlay = $('#miniBtnPlay');
+
+  if (currentTrack) {
+    if (miniTitle) miniTitle.textContent = currentTrack.title || 'Unknown Title';
+    if (miniArtist) miniArtist.textContent = currentTrack.artist || 'Unknown Artist';
+    if (miniCover && currentTrack.artwork) miniCover.src = safeArtwork(currentTrack.artwork);
+    else if (miniCover) miniCover.src = '../assets/mintpy-logo.png';
+  } else {
+    if (miniTitle) miniTitle.textContent = 'MintPy Zen Player';
+    if (miniArtist) miniArtist.textContent = 'Выберите трек для прослушивания';
+    if (miniCover) miniCover.src = '../assets/mintpy-logo.png';
+  }
+
+  const isActuallyPlaying = isPlaying && !audio.paused;
+  if (isActuallyPlaying) {
+    document.body.classList.add('is-playing');
+  } else {
+    document.body.classList.remove('is-playing');
+  }
+
+  if (miniBtnPlay) {
+    miniBtnPlay.innerHTML = isActuallyPlaying ? icon('pause') : icon('play');
+  }
+
+  const duration = audio.duration;
+  const hasDuration = duration && isFinite(duration);
+  if (hasDuration) {
+    const cur = audio.currentTime || 0;
+    const pct = Math.min(100, Math.max(0, (cur / duration) * 100));
+    if (miniProgressFill) miniProgressFill.style.width = pct + '%';
+    if (miniTime) miniTime.textContent = fmt(cur) + ' / ' + fmt(duration);
+  } else {
+    if (miniProgressFill) miniProgressFill.style.width = '0%';
+    if (miniTime) miniTime.textContent = '0:00 / 0:00';
+  }
+}
+
+// ==================== DISCORD RICH PRESENCE ====================
+function updateDiscordPresence() {
+  if (uiSettings.discordRpcEnabled === false) return;
+  if (!bridge.setDiscordActivity) return;
+  if (!currentTrack) {
+    bridge.setDiscordActivity({ title: '', style: uiSettings.style || 'zen' });
+    return;
+  }
+  bridge.setDiscordActivity({
+    title: currentTrack.title || 'Unknown Title',
+    artist: currentTrack.artist || 'Unknown Artist',
+    duration: audio.duration && isFinite(audio.duration) ? audio.duration : (currentTrack.duration || 0),
+    position: audio.currentTime || 0,
+    isPlaying: isPlaying && !audio.paused,
+    style: uiSettings.style || 'zen'
+  });
+}
+
+// ==================== DRAG & DROP ====================
+function initDragAndDrop() {
+  const overlay = $('#mintpy-dropzone-overlay');
+  if (!overlay) return;
+
+  let dragCounter = 0;
+  window.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    dragCounter++;
+    if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      overlay.classList.remove('hidden');
+    }
+  });
+
+  window.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      overlay.classList.add('hidden');
+    }
+  });
+
+  window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  });
+
+  window.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    overlay.classList.add('hidden');
+
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (!files.length) return;
+
+    const paths = files.map(f => bridge.getPathForFile(f)).filter(Boolean);
+    if (!paths.length) return;
+
+    showError('Импорт аудиофайлов...');
+    try {
+      const importedTracks = await bridge.importDroppedFiles(paths);
+      if (importedTracks && importedTracks.length > 0) {
+        showError(`Добавлено ${importedTracks.length} треков ✨`);
+        queue.push(...importedTracks);
+        persistPlaybackQueue();
+        if (!currentTrack || audio.paused) {
+          playTrack(importedTracks[0], queue.length - importedTracks.length);
+        } else {
+          renderQueue();
+        }
+        if (currentView === 'library') renderLibrary();
+      } else {
+        showError('Не найдено поддерживаемых аудиофайлов');
+      }
+    } catch (err) {
+      console.error('Drop error:', err);
+      showError('Ошибка импорта файлов: ' + err.message);
+    }
+  });
+}

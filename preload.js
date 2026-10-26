@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   win: (action) => ipcRenderer.send('win-control', action),
   searchTracks: (q) => ipcRenderer.invoke('search-tracks', q),
@@ -44,5 +44,29 @@ contextBridge.exposeInMainWorld('api', {
   deleteCustomPet: (file) => ipcRenderer.invoke('delete-custom-pet', file),
   getPetDataUrl: (file) => ipcRenderer.invoke('get-pet-data-url', file),
   setupComplete: (options) => ipcRenderer.invoke('setup:complete', options),
-  setupSetWindowMode: (mode) => ipcRenderer.invoke('setup:set-window-mode', mode)
+  setupSetWindowMode: (mode) => ipcRenderer.invoke('setup:set-window-mode', mode),
+
+  // Discord Rich Presence
+  setDiscordActivity: (activity) => ipcRenderer.invoke('discord:set-activity', activity),
+  setDiscordEnabled: (enabled) => ipcRenderer.invoke('discord:set-enabled', enabled),
+
+  // Drag & Drop
+  getPathForFile: (file) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch {}
+    return file?.path || '';
+  },
+  importDroppedFiles: (paths) => ipcRenderer.invoke('audio:import-dropped-files', paths),
+
+  // Mini-Player Mode
+  setMiniMode: (isMini) => ipcRenderer.invoke('window:set-mini-mode', isMini),
+  getMiniMode: () => ipcRenderer.invoke('window:get-mini-mode'),
+  onMiniModeChange: (callback) => {
+    const listener = (_, val) => callback(val);
+    ipcRenderer.on('window:mini-mode-changed', listener);
+    return () => ipcRenderer.removeListener('window:mini-mode-changed', listener);
+  }
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, globalShortcut, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, globalShortcut, Tray, Menu, nativeImage, shell, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -8,6 +8,7 @@ const { createDataStore, normalizeData } = require('./src/main/data-store');
 const { importFromUrl } = require('./src/main/playlist-importer');
 const { findBestYouTubeTrack } = require('./src/main/smart-resolver');
 const { validateSettings, validateSearchQuery, validatePlaylistName, validatePlaylistId, validateTrackId, validateTrack, validPetFile, isTrustedSender } = require('./src/main/validators');
+const discordRpc = require('./src/main/discord-rpc');
 const { URL, pathToFileURL } = require('url');
 
 // cover:// protocol serves album artwork cached on disk
@@ -154,6 +155,7 @@ handle('set-global-mute', (_, rawAcc) => {
 
 app.on('will-quit', () => {
   try { globalShortcut.unregisterAll(); } catch {}
+  try { discordRpc.destroy(); } catch {}
   tray?.destroy();
   tray = null;
 });
@@ -321,6 +323,49 @@ async function saveCover(picture, sourceFile, coversDir) {
   } catch { return ''; }
 }
 
+async function processAudioFile(full, filename, parseFileFn, coversDir) {
+  let meta = null;
+  if (parseFileFn) {
+    try {
+      const metadata = await parseFileFn(full, { native: true, duration: true });
+      meta = {
+        title: metadata.common.title,
+        artist: metadata.common.artist || 'Unknown',
+        album: metadata.common.album || 'Unknown',
+        picture: metadata.common.picture,
+        duration: metadata.format.duration || 0
+      };
+    } catch (e) {
+      console.warn('Parse fail (using filename):', full, e.message);
+    }
+  }
+  if (!meta) {
+    const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
+    const parts = nameWithoutExt.split(' - ');
+    meta = {
+      title: null,
+      artist: parts.length > 1 ? parts[0] : 'Unknown',
+      album: 'Unknown',
+      picture: null,
+      duration: 0
+    };
+    if (parts.length > 1) meta.title = parts.slice(1).join(' - ');
+  }
+
+  const artwork = await saveCover(meta.picture, full, coversDir);
+  allowedLocalFiles.add(path.resolve(full));
+  return {
+    id: `local:${full}`,
+    filepath: full,
+    title: meta.title || filename.replace(/\.[^.]+$/, ''),
+    artist: meta.artist,
+    album: meta.album,
+    artwork,
+    duration: meta.duration || 0,
+    source: 'local'
+  };
+}
+
 handle('scan-folder', async (_, folderPath) => {
   if (typeof folderPath !== 'string' || folderPath.length > 4096) throw new TypeError('Invalid folder path');
   console.log('=== SCAN START ===');
@@ -384,45 +429,8 @@ handle('scan-folder', async (_, folderPath) => {
       }
       if (!AUDIO_RE.test(entry.name)) continue;
 
-      let meta = null;
-      if (parseFileFn) {
-        try {
-          const metadata = await parseFileFn(full, { native: true, duration: true });
-          meta = {
-            title: metadata.common.title,
-            artist: metadata.common.artist || 'Unknown',
-            album: metadata.common.album || 'Unknown',
-            picture: metadata.common.picture,
-            duration: metadata.format.duration || 0
-          };
-        } catch (e) {
-          console.warn('Parse fail (using filename):', full, e.message);
-        }
-      }
-      if (!meta) {
-        // Fallback: use "Artist - Title" from filename
-        const nameWithoutExt = entry.name.replace(/\.[^.]+$/, '');
-        const parts = nameWithoutExt.split(' - ');
-        meta = {
-          title: null,
-          artist: parts.length > 1 ? parts[0] : 'Unknown',
-          album: 'Unknown',
-          picture: null,
-          duration: 0
-        };
-        if (parts.length > 1) meta.title = parts.slice(1).join(' - ');
-      }
-
-      const artwork = await saveCover(meta.picture, full, coversDir);
-      tracks.push({
-        id: `local:${full}`, filepath: full,
-        title: meta.title || entry.name.replace(/\.[^.]+$/, ''),
-        artist: meta.artist,
-        album: meta.album,
-        artwork,
-        duration: meta.duration || 0, source: 'local'
-      });
-      allowedLocalFiles.add(path.resolve(full));
+      const track = await processAudioFile(full, entry.name, parseFileFn, coversDir);
+      if (track) tracks.push(track);
       processed++;
       if (processed % 10 === 0) send(`Found: ${tracks.length} tracks...`);
       // Yield to the event loop so IPC/UI stay responsive
@@ -787,6 +795,9 @@ handle('save-settings', (_, settings) => {
   const data = loadData();
   data.settings = validated;
   saveData(data);
+  try {
+    discordRpc.init(validated.discordRpcEnabled !== false);
+  } catch {}
   return true;
 });
 
@@ -831,6 +842,124 @@ handle('setup:set-window-mode', async (_, mode) => {
     mainWindow.center();
   } catch {}
   return { ok: true, mode };
+});
+
+// ========== Drag & Drop Audio Import ==========
+handle('audio:import-dropped-files', async (_, rawPaths) => {
+  if (!Array.isArray(rawPaths)) return [];
+  const tracks = [];
+  let parseFileFn = null;
+  try {
+    ({ parseFile: parseFileFn } = await import('music-metadata'));
+  } catch (e) {
+    console.error('Failed to init music-metadata:', e.message);
+  }
+  const coversDir = path.join(app.getPath('userData'), 'covers');
+  fs.mkdirSync(coversDir, { recursive: true });
+
+  for (const raw of rawPaths) {
+    if (typeof raw !== 'string' || !raw) continue;
+    let full;
+    try {
+      full = path.resolve(raw);
+      if (!fs.existsSync(full)) continue;
+    } catch {
+      continue;
+    }
+
+    const stat = fs.statSync(full);
+    if (stat.isDirectory()) {
+      allowedLibraryRoots.add(full);
+      const stack = [full];
+      while (stack.length > 0) {
+        const dir = stack.pop();
+        let entries = [];
+        try {
+          entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        } catch { continue; }
+        for (const entry of entries) {
+          const entryFull = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            if (!shouldSkipDir(entry.name)) stack.push(entryFull);
+          } else if (AUDIO_RE.test(entry.name)) {
+            const track = await processAudioFile(entryFull, entry.name, parseFileFn, coversDir);
+            if (track) tracks.push(track);
+          }
+        }
+      }
+    } else if (AUDIO_RE.test(full)) {
+      allowedLibraryRoots.add(path.dirname(full));
+      const track = await processAudioFile(full, path.basename(full), parseFileFn, coversDir);
+      if (track) tracks.push(track);
+    }
+  }
+
+  if (tracks.length > 0) {
+    try {
+      const data = loadData();
+      data.library = data.library || { folders: [], tracks: [] };
+      const byPath = new Map((data.library.tracks || []).map(t => [t.filepath, t]));
+      tracks.forEach(t => byPath.set(t.filepath, t));
+      data.library.tracks = [...byPath.values()];
+      saveData(data);
+    } catch (e) {
+      console.error('Failed to save dropped tracks to library:', e);
+    }
+  }
+
+  return tracks;
+});
+
+// ========== Mini-Player Mode ==========
+let normalBounds = null;
+let isMiniMode = false;
+
+handle('window:set-mini-mode', (_, enableMini) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  enableMini = Boolean(enableMini);
+  if (enableMini === isMiniMode) return isMiniMode;
+
+  if (enableMini) {
+    normalBounds = mainWindow.getBounds();
+    isMiniMode = true;
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.setMinimumSize(320, 140);
+    const primaryDisplay = screen.getDisplayMatching(normalBounds);
+    const workArea = primaryDisplay.workArea;
+    const miniWidth = 360;
+    const miniHeight = 150;
+    const x = Math.min(normalBounds.x, workArea.x + workArea.width - miniWidth - 24);
+    const y = Math.min(normalBounds.y, workArea.y + workArea.height - miniHeight - 24);
+    mainWindow.setBounds({ x, y, width: miniWidth, height: miniHeight });
+    mainWindow.webContents.send('window:mini-mode-changed', true);
+  } else {
+    isMiniMode = false;
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.setMinimumSize(980, 680);
+    if (normalBounds) {
+      mainWindow.setBounds(normalBounds);
+    } else {
+      mainWindow.setSize(1360, 860);
+      mainWindow.center();
+    }
+    mainWindow.webContents.send('window:mini-mode-changed', false);
+  }
+  return isMiniMode;
+});
+
+handle('window:get-mini-mode', () => isMiniMode);
+
+// ========== Discord Rich Presence ==========
+handle('discord:set-activity', (_, activity) => {
+  if (activity && typeof activity === 'object') {
+    discordRpc.setActivity(activity);
+  }
+  return true;
+});
+
+handle('discord:set-enabled', (_, enabled) => {
+  discordRpc.init(Boolean(enabled));
+  return true;
 });
 
 function hydrateAllowedFiles() {

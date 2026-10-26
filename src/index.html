@@ -133,6 +133,7 @@
         </svg>
       </div>
       <div class="win-btns">
+        <button class="wb" id="winMini" aria-label="Mini-player" title="Компактный мини-плеер"><svg class="ico" viewBox="0 0 24 24"><path d="M4 4h16v10H4zM13 9h7v5h-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button class="wb" id="winMin" aria-label="Minimize"><svg class="ico"><use href="#ico-minus"/></svg></button>
         <button class="wb" id="winMax" aria-label="Maximize"><svg class="ico"><use href="#ico-maximize"/></svg></button>
         <button class="wb close" id="winClose" aria-label="Hide to tray" title="Hide to tray"><svg class="ico"><use href="#ico-close"/></svg></button>
@@ -515,6 +516,63 @@
       </div>
     </div>
   </div>
+  <!-- Drag & Drop Fullscreen Overlay -->
+  <div id="mintpy-dropzone-overlay" class="mintpy-dropzone-overlay hidden">
+    <div class="dropzone-card">
+      <div class="dropzone-glow"></div>
+      <div class="dropzone-icon">🎵</div>
+      <h3 class="dropzone-title">Бросьте треки или папки сюда</h3>
+      <p class="dropzone-subtitle">MintPy мгновенно добавит музыку в очередь и начнёт погружение ✨</p>
+      <div class="dropzone-tags">
+        <span>MP3</span>
+        <span>FLAC</span>
+        <span>WAV</span>
+        <span>OGG</span>
+        <span>M4A</span>
+        <span>Папки с альбомами</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mini-Player Floating Widget View -->
+  <div id="mini-player-widget" class="mini-player-widget">
+    <div class="mini-topbar">
+      <div class="mini-brand">
+        <span class="mini-brand-icon">🌿</span>
+        <span class="mini-brand-text">MintPy</span>
+      </div>
+      <div class="mini-win-actions">
+        <button id="miniBtnRestore" class="mini-wb" title="Развернуть полный плеер" aria-label="Restore">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="miniBtnClose" class="mini-wb close" title="Скрыть в трей" aria-label="Close">
+          <svg class="ico"><use href="#ico-close"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="mini-body">
+      <div class="mini-cover-container">
+        <img id="miniCover" class="mini-cover-art" src="../assets/mintpy-logo.png" alt="Cover">
+        <div id="miniVinylDisc" class="mini-vinyl-sheen"></div>
+      </div>
+      <div class="mini-content-col">
+        <div class="mini-meta">
+          <div id="miniTitle" class="mini-title">MintPy Zen Player</div>
+          <div id="miniArtist" class="mini-artist">Выберите трек для прослушивания</div>
+        </div>
+        <div class="mini-controls-bar">
+          <button id="miniBtnPrev" class="mini-ctrl" title="Предыдущий"><svg class="ico"><use href="#ico-prev"/></svg></button>
+          <button id="miniBtnPlay" class="mini-ctrl primary" title="Воспроизведение / Пауза"><svg class="ico"><use href="#ico-play"/></svg></button>
+          <button id="miniBtnNext" class="mini-ctrl" title="Следующий"><svg class="ico"><use href="#ico-next"/></svg></button>
+          <span id="miniTime" class="mini-time">0:00 / 0:00</span>
+        </div>
+      </div>
+    </div>
+    <div class="mini-scrubber-track" id="miniProgressWrap">
+      <div class="mini-scrubber-fill" id="miniProgressFill"></div>
+    </div>
+  </div>
+
   <script src="mobile-bridge.js"></script>
   <script src="pets.js"></script>
   <script src="lyrics.js"></script>
