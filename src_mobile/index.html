@@ -6,9 +6,6 @@
   <meta name="theme-color" content="#121413">
   <title>MintPy Mobile</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <!-- SVG Sprite Icons -->
@@ -99,9 +96,14 @@
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
     </symbol>
+    <symbol id="ico-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/><polygon points="17 12 22 15.5 17 19 17 12" fill="currentColor" stroke="none"/>
+    </symbol>
   </svg>
 
   <div class="mobile-app">
+    <canvas id="bg-shader-canvas" aria-hidden="true"></canvas>
+    <div class="dynamic-art-bg" id="dynamicArtBg"></div>
     <!-- Atmospheric Ambient Particles Canvas (Zen Sakura, Ocean Bubbles, Lo-Fi Steam, etc.) -->
     <canvas id="sakura-canvas"></canvas>
 
@@ -113,21 +115,6 @@
           <h1>MintPy</h1>
           <span class="header-style-tag" id="headerStyleTag">Zen 🎋</span>
         </div>
-      </div>
-      <div class="header-actions">
-        <button class="header-icon-btn" id="headerThemeBtn" title="Переключить тему (Светлая / Тёмная)">
-          <svg class="ico" id="headerThemeIco"><use href="#ico-sun"/></svg>
-        </button>
-        <button class="header-icon-btn" id="headerHistoryBtn" title="История прослушивания">
-          <svg class="ico"><use href="#ico-history"/></svg>
-        </button>
-        <button class="header-icon-btn" id="headerAmbientBtn" title="Атмосфера (звуки природы)">
-          <svg class="ico"><use href="#ico-leaf"/></svg>
-        </button>
-        <button class="header-icon-btn" id="headerSleepBtn" title="Таймер сна">
-          <svg class="ico"><use href="#ico-timer"/></svg>
-          <span id="sleepTimerBadge" class="timer-badge"></span>
-        </button>
       </div>
     </header>
 
@@ -186,6 +173,7 @@
   <script src="lyrics.js"></script>
   <script src="ambient.js"></script>
   <script src="sleep-timer.js"></script>
+  <script src="wallpaper-shader.js"></script>
   <script src="sakura.js"></script>
   <script src="main.js"></script>
 </body>

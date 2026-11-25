@@ -246,6 +246,44 @@ function ytDlp(args, timeoutMs) {
 
 handle('search-tracks', async (_, query) => {
   query = validateSearchQuery(query);
+  // Fast Innertube HTTP search first (~200ms vs 2-4s yt-dlp spawn)
+  try {
+    const resp = await fetch('https://www.youtube.com/youtubei/v1/search?prettyPrint=false', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({
+        context: { client: { clientName: 'WEB', clientVersion: '2.20240601.00.00', hl: 'ru', gl: 'RU' } },
+        query
+      }),
+      signal: AbortSignal.timeout(7000)
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const sections = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+      const tracks = [];
+      for (const sec of sections) {
+        for (const it of (sec?.itemSectionRenderer?.contents || [])) {
+          const v = it.videoRenderer;
+          if (!v || !v.videoId) continue;
+          const durText = v.lengthText?.simpleText || '';
+          if (!durText) continue;
+          const parts = durText.split(':').map(Number);
+          const duration = parts.length === 2 ? parts[0] * 60 + parts[1] : (parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : 0);
+          const thumbs = v.thumbnail?.thumbnails || [];
+          tracks.push({
+            id: `yt:${v.id || v.videoId}`,
+            title: v.title?.runs?.[0]?.text || v.title?.simpleText || '',
+            artist: v.ownerText?.runs?.[0]?.text || 'YouTube',
+            artwork: thumbs.length ? thumbs[thumbs.length - 1].url : '',
+            duration,
+            source: 'youtube'
+          });
+          if (tracks.length >= 20) return tracks;
+        }
+      }
+      if (tracks.length > 0) return tracks;
+    }
+  } catch {}
   try {
     // Request more than needed: live streams and unplayable entries get filtered out
     const json = await ytDlp(['--flat-playlist', '--dump-json', `ytsearch30:${query}`]);

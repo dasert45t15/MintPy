@@ -12,70 +12,142 @@ function createAudioProxy({ allowedLocalFiles, ytDlp }) {
   const PROXY_TOKEN = crypto.randomBytes(24).toString('hex');
   
   const ytUrlCache = new Map();
+  const ytInFlight = new Map();
   // Fallback chain: YouTube bot-detection and format restrictions make single-format
   // extraction unreliable, so we retry with progressively different formats and clients.
   const YT_RESOLVE_ATTEMPTS = [
     { args: ['-f', 'bestaudio[ext=m4a]/bestaudio'] },
-    { args: ['-f', 'bestaudio'] },
-    { args: ['--extractor-args', 'youtube:player_client=android', '-f', 'bestaudio/best'] },
-    { args: ['--extractor-args', 'youtube:player_client=ios', '-f', 'bestaudio/best'] },
-    { args: ['--extractor-args', 'youtube:player_client=tv', '-f', 'bestaudio/best'] },
+    { args: ['-f', 'bestaudio/best'] },
+    { args: ['--extractor-args', 'youtube:player_client=tv,android', '-f', 'bestaudio/best'] },
   ];
 
-  async function resolveYtUrl(videoId) {
+  function invalidateYtCache(videoId) {
+    const key = String(videoId || '');
+    ytUrlCache.delete(key);
+    if (key.startsWith('yt:')) ytUrlCache.delete(key.slice(3));
+  }
+
+  async function resolveYtStream(videoId, forceFresh = false) {
     const key = String(videoId);
-    const cached = ytUrlCache.get(key);
-    const now = Date.now();
-    if (cached && now - cached.time < 1800000) {
-      if (cached.url) return cached.url;
-      if (now - cached.time < 5000) return null; // 5s transient backoff only
-    }
-
-    let realVideoId = key;
-    if (key.startsWith('ytsearch:')) {
-      let rawQuery = key.slice(9);
-      try { rawQuery = decodeURIComponent(rawQuery); } catch {}
-      try {
-        console.log(`Smart resolving YouTube search: "${rawQuery}"`);
-        const best = await findBestYouTubeTrack(ytDlp, '', rawQuery, 0);
-        if (best && best.id) {
-          realVideoId = best.id;
-          console.log(`Smart resolved "${rawQuery}" -> ${realVideoId}`);
-        }
-      } catch (err) {
-        console.warn('Smart search resolution failed, falling back:', err.message);
+    if (!forceFresh) {
+      const cached = ytUrlCache.get(key);
+      const now = Date.now();
+      if (cached && now - cached.time < 1500000) {
+        if (cached.stream) return cached.stream;
+        if (now - cached.time < 5000) return null; // 5s transient backoff only
       }
     }
 
-    let target;
-    if (realVideoId.startsWith('ytsearch:')) {
-      let q = realVideoId.slice(9);
-      try { q = decodeURIComponent(q); } catch {}
-      target = `ytsearch1:${q}`;
-    } else {
-      target = `https://www.youtube.com/watch?v=${realVideoId}`;
-    }
+    if (ytInFlight.has(key)) return ytInFlight.get(key);
 
-    let lastErr = null;
-    for (const attempt of YT_RESOLVE_ATTEMPTS) {
-      try {
-        const out = await ytDlp(['-g', ...attempt.args, target], 20000);
-        const url = out.split('\n')[0];
-        if (url) {
-          ytUrlCache.set(key, { url, time: now });
-          if (realVideoId !== key) {
-            ytUrlCache.set(realVideoId, { url, time: now });
+    const task = (async () => {
+      const now = Date.now();
+      let realVideoId = key.startsWith('yt:') ? key.slice(3) : key;
+      if (realVideoId.startsWith('ytsearch:')) {
+        let rawQuery = realVideoId.slice(9);
+        try { rawQuery = decodeURIComponent(rawQuery); } catch {}
+        try {
+          console.log(`Smart resolving YouTube search: "${rawQuery}"`);
+          const best = await findBestYouTubeTrack(ytDlp, '', rawQuery, 0);
+          if (best && best.id) {
+            realVideoId = best.id.startsWith('yt:') ? best.id.slice(3) : best.id;
+            console.log(`Smart resolved "${rawQuery}" -> ${realVideoId}`);
           }
-          return url;
+        } catch (err) {
+          console.warn('Smart search resolution failed, falling back:', err.message);
         }
-      } catch (e) {
-        lastErr = e;
-        console.warn(`yt-dlp resolve failed (${attempt.args.join(' ')}):`, e.message);
       }
+
+      let target;
+      if (realVideoId.startsWith('ytsearch:')) {
+        let q = realVideoId.slice(9);
+        try { q = decodeURIComponent(q); } catch {}
+        target = `ytsearch1:${q}`;
+      } else {
+        target = `https://www.youtube.com/watch?v=${realVideoId}`;
+      }
+
+      const storeStream = (stream) => {
+        const entry = { stream, time: Date.now() };
+        ytUrlCache.set(key, entry);
+        if (realVideoId !== key) ytUrlCache.set(realVideoId, entry);
+        return stream;
+      };
+
+      // Primary on Desktop: yt-dlp handles signature decryption & avoids unauthenticated IOS/ANDROID 403s
+      let lastErr = null;
+      for (const attempt of YT_RESOLVE_ATTEMPTS) {
+        try {
+          const out = await ytDlp(['--no-warnings', '--no-playlist', '-j', ...attempt.args, target], 20000);
+          const jsonLine = out.trim().split('\n').find(l => l.trim().startsWith('{'));
+          if (jsonLine) {
+            const parsed = JSON.parse(jsonLine);
+            if (parsed?.url) {
+              return storeStream({
+                url: parsed.url,
+                userAgent: parsed.http_headers?.['User-Agent'] || '',
+              });
+            }
+          }
+        } catch (e) {
+          lastErr = e;
+          console.warn(`yt-dlp resolve failed (${attempt.args.join(' ')}):`, e.message);
+        }
+      }
+
+      // Last-resort direct Innertube fallback only if yt-dlp binary failed completely
+      if (!realVideoId.startsWith('ytsearch:')) {
+        const clients = [
+          {
+            ua: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X)',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Youtube-Client-Name': '5',
+              'X-Youtube-Client-Version': '20.10.4'
+            },
+            body: {
+              context: { client: { clientName: 'IOS', clientVersion: '20.10.4', deviceMake: 'Apple', deviceModel: 'iPhone16,2', osName: 'iPhone', osVersion: '18.3.2.22D82', hl: 'en', gl: 'US' } },
+              videoId: realVideoId
+            }
+          },
+          {
+            ua: 'com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Youtube-Client-Name': '3',
+              'X-Youtube-Client-Version': '20.10.38'
+            },
+            body: {
+              context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38', androidSdkVersion: 34, osName: 'Android', osVersion: '14', hl: 'en', gl: 'US' } },
+              videoId: realVideoId
+            }
+          }
+        ];
+        for (const c of clients) {
+          try {
+            const resp = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+              method: 'POST', headers: { ...c.headers, 'User-Agent': c.ua }, body: JSON.stringify(c.body), signal: AbortSignal.timeout(6000)
+            });
+            if (!resp.ok) continue;
+            const j = await resp.json();
+            const fmts = (j?.streamingData?.adaptiveFormats || []).filter(f => (f.mimeType || '').startsWith('audio/') && f.url).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+            const best = fmts.find(f => (f.mimeType || '').includes('audio/mp4')) || fmts[0];
+            if (best?.url) return storeStream({ url: best.url, userAgent: c.ua });
+          } catch {}
+        }
+      }
+
+      ytUrlCache.set(key, { stream: null, time: now });
+      if (lastErr) throw lastErr;
+      return null;
+    })();
+
+    ytInFlight.set(key, task);
+    try {
+      return await task;
+    } finally {
+      ytInFlight.delete(key);
     }
-    ytUrlCache.set(key, { url: null, time: now });
-    if (lastErr) throw lastErr;
-    return null;
   }
   
   function originAllowed(req) {
@@ -149,14 +221,13 @@ function createAudioProxy({ allowedLocalFiles, ytDlp }) {
       const isSearch = videoId && videoId.startsWith('ytsearch:');
       if (!videoId || (!isSearch && !/^[A-Za-z0-9_-]{6,20}$/.test(videoId))) { res.writeHead(400); res.end('Missing or invalid video id'); return; }
       console.log('YouTube stream for video:', videoId);
-      try {
-        const directUrl = await resolveYtUrl(videoId);
-        if (!directUrl) { res.writeHead(502); res.end('No URL resolved'); return; }
-        const isHttps = directUrl.startsWith('https');
+
+      const pipeUpstream = (stream, attempt) => {
+        const isHttps = stream.url.startsWith('https');
         const proxyMod = isHttps ? https : http;
-        const dst = new URL(directUrl);
+        const dst = new URL(stream.url);
         const headers = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': stream.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': '*/*',
         };
         if (req.headers.range) headers.Range = req.headers.range;
@@ -164,26 +235,47 @@ function createAudioProxy({ allowedLocalFiles, ytDlp }) {
           hostname: dst.hostname,
           port: dst.port,
           path: dst.pathname + dst.search,
+          method: req.method === 'HEAD' ? 'HEAD' : 'GET',
           headers,
-        }, proxyRes => {
+        }, async proxyRes => {
+          const st = proxyRes.statusCode || 200;
+          if ((st === 403 || st === 410 || st >= 500) && attempt === 0 && !res.destroyed) {
+            proxyRes.resume();
+            invalidateYtCache(videoId);
+            try {
+              const fresh = await resolveYtStream(videoId, true);
+              if (fresh && !res.destroyed) return pipeUpstream(fresh, 1);
+            } catch (err) {
+              console.error('YouTube retry resolve failed:', err.message);
+            }
+            if (!res.headersSent && !res.destroyed) { res.writeHead(st >= 400 ? st : 502); res.end('Stream upstream error'); }
+            return;
+          }
           const outHeaders = {};
           for (const [k, v] of Object.entries(proxyRes.headers)) {
             if (!HOP_BY_HOP_HEADERS.has(k.toLowerCase())) outHeaders[k] = v;
           }
+          if (!outHeaders['accept-ranges']) outHeaders['accept-ranges'] = 'bytes';
           outHeaders['Access-Control-Allow-Origin'] = '*';
           outHeaders['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS';
           outHeaders['Access-Control-Allow-Headers'] = 'Range, Content-Type';
           outHeaders['Access-Control-Expose-Headers'] = 'Accept-Ranges, Content-Length, Content-Range';
-          res.writeHead(proxyRes.statusCode || 200, outHeaders);
+          res.writeHead(st, outHeaders);
           proxyRes.pipe(res);
         });
         proxyReq.on('error', e => {
           console.error('YouTube proxy error:', e.message);
-          ytUrlCache.delete(videoId);
+          invalidateYtCache(videoId);
           if (!res.headersSent) { res.writeHead(502); res.end('Stream error'); } else res.destroy();
         });
         proxyReq.end();
         req.on('close', () => proxyReq.destroy());
+      };
+
+      try {
+        const stream = await resolveYtStream(videoId);
+        if (!stream) { res.writeHead(502); res.end('No URL resolved'); return; }
+        pipeUpstream(stream, 0);
       } catch (e) {
         console.error('YouTube stream error:', e.message);
         if (!res.headersSent) { res.writeHead(502); res.end('Stream failed'); }

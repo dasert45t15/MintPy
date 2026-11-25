@@ -1,6 +1,6 @@
 {
   "name": "mintpy",
-  "version": "5.3.8",
+  "version": "5.4.6",
   "description": "Japanese-inspired desktop music player with local playback and YouTube streaming",
   "author": "MintPy",
   "license": "MIT",
@@ -11,6 +11,9 @@
     "pack": "electron-builder --dir",
     "dist": "electron-builder --publish never",
     "build:apk": "python scripts/build-android-apk.py",
+    "build:native": "powershell -ExecutionPolicy Bypass -File scripts/build-cpp.ps1",
+    "build:installer": "powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1",
+    "start:native": "powershell -ExecutionPolicy Bypass -Command \"Start-Process .\\releases\\MintPy-Native.exe\"",
     "check": "node scripts/check-syntax.js",
     "test": "node --test"
   },

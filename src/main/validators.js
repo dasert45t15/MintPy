@@ -28,8 +28,8 @@ function defaultSettings() {
     opacity: 1, auraIntensity: 0.35, compactMode: false, appearance: 'system',
     accentColor: 'blue-purple', customColor: '', cornerRadius: 30, keybinds: {},
     style: 'zen', pet: '', petSize: 96, petPos: null,
-    volumeNormalize: false, eqBands: { low: 0, mid: 0, high: 0 }, crossfadeSeconds: 0,
-    setupCompleted: false, discordRpcEnabled: true
+    volumeNormalize: false, eqBands: { low: 0, mid: 0, high: 0 }, crossfadeSeconds: 5,
+    setupCompleted: false, discordRpcEnabled: true, volume: 30, smartQueueEnabled: true
   };
 }
 
@@ -43,6 +43,11 @@ function validateSettings(raw) {
     else if (key === 'cornerRadius') result[key] = number(value, key, 0, 100);
     else if (key === 'petSize') result[key] = number(value, key, 40, 200);
     else if (key === 'crossfadeSeconds') result[key] = number(value, key, 0, 12);
+    else if (key === 'volume') result[key] = number(value, key, 0, 100);
+    else if (key === 'smartQueueEnabled') {
+      if (typeof value !== 'boolean') throw new TypeError('smartQueueEnabled must be boolean');
+      result[key] = value;
+    }
     else if (key === 'setupCompleted') {
       if (typeof value !== 'boolean') throw new TypeError('setupCompleted must be boolean');
       result[key] = value;

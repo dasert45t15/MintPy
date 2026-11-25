@@ -1,4 +1,4 @@
-// MintPy Mobile Controller - v5.3.8
+// MintPy Mobile Controller - v5.4.6
 // Standalone mobile player logic decoupled from PC Electron.
 
 (function () {
@@ -13,13 +13,29 @@
   let isRepeat = false;
   let currentView = 'home';
   let seekDragging = false;
+  let lastAnimatedTrackId = null;
+  let lastPlayIconState = null;
 
   const bridge = window.api;
 
-  // Audio Deck (Native HTML5 Audio without CORS restrictions)
-  const audio = new Audio();
-  audio.loop = false;
-  audio.volume = 1.0;
+  // Dual-Deck Audio Engine (Native HTML5 Audio for gapless preload & crossfade)
+  const deckA = new Audio();
+  const deckB = new Audio();
+  [deckA, deckB].forEach(d => {
+    d.loop = false;
+    d.volume = 1.0;
+    d.preload = 'auto';
+  });
+  let audio = deckA;
+  let spareAudio = deckB;
+
+  // Native Android Service MediaPlayer state (for HTTP streams running reliably in background)
+  const hasNativePlayer = !!(window.AndroidNative && typeof window.AndroidNative.nativePlayUrl === 'function');
+  let usingNativeAudio = false;
+  let nativeCurrentTime = 0;
+  let nativeDuration = 0;
+  let nativePaused = true;
+  let nativeHasSource = false;
 
   // Settings state
   let settings = {
@@ -27,8 +43,63 @@
     style: 'zen',
     volumeNormalize: false,
     eqBands: { low: 0, mid: 0, high: 0 },
-    crossfadeSeconds: 0
+    crossfadeSeconds: 5,
+    dynamicArtBg: false,
+    playbackSpeed: 1.0
   };
+
+  const THEME_LIST = [
+    { id: 'zen', name: 'Zen', emoji: '🎋' },
+    { id: 'lofi', name: 'Lo-Fi', emoji: '☕' },
+    { id: 'synthwave', name: 'Synthwave', emoji: '🌆' },
+    { id: 'ocean', name: 'Ocean', emoji: '🌊' },
+    { id: 'forest', name: 'Forest', emoji: '🌲' },
+    { id: 'aurora', name: 'Aurora', emoji: '✨' },
+    { id: 'sakura', name: 'Sakura Night', emoji: '🌸' },
+    { id: 'midnight', name: 'Midnight Gold', emoji: '🌙' },
+    { id: 'cyber', name: 'Cyberpunk', emoji: '⚡' }
+  ];
+
+  const EQ_PRESETS = [
+    { id: 'flat', label: 'Ровный', bands: { low: 0, mid: 0, high: 0 } },
+    { id: 'bass', label: 'Бас+', bands: { low: 8, mid: 0, high: 2 } },
+    { id: 'vocal', label: 'Вокал', bands: { low: -2, mid: 6, high: 4 } },
+    { id: 'rock', label: 'Рок', bands: { low: 6, mid: 2, high: 6 } },
+    { id: 'night', label: 'Ночь', bands: { low: 4, mid: -2, high: -3 } }
+  ];
+
+  const SPEED_OPTIONS = [0.85, 1.0, 1.15, 1.25, 1.5];
+
+  function updateDynamicArtBg() {
+    const el = $('#dynamicArtBg');
+    if (!el) return;
+    const art = currentTrack && typeof currentTrack.artwork === 'string' ? currentTrack.artwork.trim() : '';
+    if (settings.dynamicArtBg && art && !art.includes('mintpy-logo')) {
+      el.style.backgroundImage = `url("${art.replace(/"/g, '%22')}")`;
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  }
+
+  function syncNativeEq() {
+    const b = settings.eqBands || {};
+    const low = Number(b.low) || 0;
+    const mid = Number(b.mid) || 0;
+    const high = Number(b.high) || 0;
+    if (window.AndroidNative && typeof window.AndroidNative.nativeSetEq === 'function') {
+      try { window.AndroidNative.nativeSetEq(low, mid, high); } catch (_) {}
+    }
+  }
+
+  function syncPlaybackSpeed() {
+    const spd = Math.max(0.5, Math.min(2.0, Number(settings.playbackSpeed) || 1.0));
+    settings.playbackSpeed = spd;
+    [deckA, deckB].forEach(d => { try { d.playbackRate = spd; } catch (_) {} });
+    if (window.AndroidNative && typeof window.AndroidNative.nativeSetPlaybackSpeed === 'function') {
+      try { window.AndroidNative.nativeSetPlaybackSpeed(spd); } catch (_) {}
+    }
+  }
 
   // Helper DOM selectors
   const $ = (s) => document.querySelector(s);
@@ -57,56 +128,494 @@
     return url && typeof url === 'string' && url.trim() ? url : '../assets/mintpy-logo.png';
   }
 
+  function triggerAnim(el, cls, timeoutMs = 450) {
+    if (!el) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    const cleanup = () => {
+      el.classList.remove(cls);
+      el.removeEventListener('animationend', cleanup);
+    };
+    el.addEventListener('animationend', cleanup, { once: true });
+    setTimeout(cleanup, timeoutMs);
+  }
+
+  function showToast(msg, type = 'info') {
+    let container = document.getElementById('mintpy-mobile-toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'mintpy-mobile-toast-container';
+      Object.assign(container.style, {
+        position: 'fixed',
+        bottom: '84px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: '99999',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
+        pointerEvents: 'none',
+        width: 'max-content',
+        maxWidth: 'calc(100vw - 32px)'
+      });
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    const bgMap = {
+      error: 'rgba(220, 38, 38, 0.92)',
+      success: 'rgba(16, 185, 129, 0.92)',
+      info: 'rgba(24, 24, 27, 0.92)'
+    };
+    const borderMap = {
+      error: 'rgba(248, 113, 113, 0.35)',
+      success: 'rgba(52, 211, 153, 0.35)',
+      info: 'rgba(255, 255, 255, 0.14)'
+    };
+
+    Object.assign(toast.style, {
+      background: bgMap[type] || bgMap.info,
+      border: `1px solid ${borderMap[type] || borderMap.info}`,
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
+      color: '#ffffff',
+      padding: '10px 16px',
+      borderRadius: '14px',
+      fontSize: '13px',
+      fontWeight: '500',
+      lineHeight: '1.35',
+      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.38)',
+      opacity: '0',
+      transform: 'translateY(12px) scale(0.96)',
+      transition: 'opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1), transform 0.28s cubic-bezier(0.16, 1, 0.3, 1)',
+      textAlign: 'center',
+      wordBreak: 'break-word'
+    });
+    toast.textContent = msg;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0) scale(1)';
+      });
+    });
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(8px) scale(0.96)';
+      setTimeout(() => {
+        toast.remove();
+        if (container.childElementCount === 0) container.remove();
+      }, 300);
+    }, 3500);
+  }
+
+  // --- DUAL-DECK CROSSFADE & AUTO-QUEUE ---
+  let crossfadeTimer = null;
+  let isCrossfading = false;
+  let preloadedTrackKey = null;
+  let isPreloadingNext = false;
+  let isAutoQueueing = false;
+  let lastAutoQueuedTrackKey = null;
+  let consecutiveFailures = 0;
+  let playSessionId = 0;
+  let failHandledSession = -1;
+  let skipTimer = null;
+
+  function handlePlaybackFailure(sessionId, desc) {
+    if (sessionId !== playSessionId || failHandledSession === sessionId) return;
+    failHandledSession = sessionId;
+    if (skipTimer) {
+      clearTimeout(skipTimer);
+      skipTimer = null;
+    }
+    if (currentTrack && bridge.invalidateTrackStream) {
+      bridge.invalidateTrackStream(currentTrack.id);
+    }
+    isPlaying = false;
+    updateGlobalUI();
+    consecutiveFailures++;
+    const canSkip = queue.length > 1 || isRepeat;
+    if (consecutiveFailures >= 3 || !canSkip) {
+      consecutiveFailures = 0;
+      showToast(`Не удалось воспроизвести: ${desc}`, 'error');
+      return;
+    }
+    showToast(`Ошибка трека (${desc}), переключаем...`, 'error');
+    skipTimer = setTimeout(() => {
+      if (sessionId === playSessionId) nextTrack();
+    }, 1500);
+  }
+
+  function getTrackKey(track) {
+    if (!track) return '';
+    return String(track.id || track.videoId || track.url || `${track.artist || ''}-${track.title || ''}`);
+  }
+
+  function cancelCrossfade() {
+    if (crossfadeTimer) {
+      clearInterval(crossfadeTimer);
+      crossfadeTimer = null;
+    }
+    isCrossfading = false;
+    preloadedTrackKey = null;
+    isPreloadingNext = false;
+    if (typeof spareAudio !== 'undefined' && spareAudio) {
+      try {
+        spareAudio.pause();
+        spareAudio.removeAttribute('src');
+        spareAudio.load();
+        spareAudio.volume = 1.0;
+      } catch (_) {}
+    }
+    if (audio) {
+      audio.volume = 1.0;
+    }
+  }
+
+  async function maybeAutoQueueRecommended(remaining) {
+    if (isAutoQueueing || !currentTrack) return;
+    if (currentIndex + 1 < queue.length) return;
+    if (typeof remaining === 'number' && remaining > 25) return;
+
+    const currentKey = getTrackKey(currentTrack);
+    if (lastAutoQueuedTrackKey === currentKey) return;
+
+    isAutoQueueing = true;
+    lastAutoQueuedTrackKey = currentKey;
+
+    try {
+      const [historyList, favoritesList] = await Promise.all([
+        bridge.getHistory ? bridge.getHistory().catch(() => []) : Promise.resolve([]),
+        bridge.getFavorites ? bridge.getFavorites().catch(() => []) : Promise.resolve([])
+      ]);
+
+      const artistCounts = new Map();
+      const bumpArtist = (artist, weight = 1) => {
+        if (!artist || typeof artist !== 'string') return;
+        const clean = artist.split(',')[0].trim();
+        if (!clean) return;
+        artistCounts.set(clean, (artistCounts.get(clean) || 0) + weight);
+      };
+
+      (favoritesList || []).slice(0, 15).forEach((t) => bumpArtist(t?.artist, 2));
+      (historyList || []).slice(0, 20).forEach((t) => bumpArtist(t?.artist, 1));
+      bumpArtist(currentTrack.artist, 3);
+
+      let seedArtist = currentTrack.artist || '';
+      let maxWeight = -1;
+      for (const [artist, weight] of artistCounts.entries()) {
+        if (weight > maxWeight) {
+          maxWeight = weight;
+          seedArtist = artist;
+        }
+      }
+
+      if (!seedArtist || !bridge.searchTracks) return;
+
+      const results = await bridge.searchTracks(`${seedArtist} mix`);
+      if (!Array.isArray(results) || results.length === 0) return;
+
+      const existingKeys = new Set(queue.map(getTrackKey));
+      const additions = [];
+      for (const item of results) {
+        const key = getTrackKey(item);
+        if (key && !existingKeys.has(key)) {
+          existingKeys.add(key);
+          additions.push(item);
+          if (additions.length >= 3) break;
+        }
+      }
+
+      if (additions.length > 0) {
+        queue.push(...additions);
+        bridge.savePlaybackState({ queue, currentIndex });
+        if (typeof updateGlobalUI === 'function') updateGlobalUI();
+        showToast('✨ Добавили треки по вашему вкусу в конец очереди', 'info');
+      }
+    } catch (e) {
+      console.warn('Auto-queue failed:', e);
+    } finally {
+      isAutoQueueing = false;
+    }
+  }
+
+  async function checkAndPreloadNextTrack() {
+    const paused = usingNativeAudio ? nativePaused : (!audio || audio.paused);
+    const dur = usingNativeAudio ? (nativeDuration || currentTrack?.duration || 0) : (audio ? audio.duration : 0);
+    const cur = usingNativeAudio ? nativeCurrentTime : (audio ? audio.currentTime : 0);
+    if (!dur || !isFinite(dur) || paused || isCrossfading) return;
+    const remaining = dur - cur;
+    if (remaining > 25 || remaining <= 0) return;
+
+    if (currentIndex + 1 >= queue.length) {
+      await maybeAutoQueueRecommended(remaining);
+    }
+
+    const nextIdx = currentIndex + 1 < queue.length ? currentIndex + 1 : (isRepeat ? 0 : -1);
+    if (nextIdx < 0 || !queue[nextIdx]) return;
+
+    const nextTrackData = queue[nextIdx];
+    const nextKey = getTrackKey(nextTrackData);
+    if (preloadedTrackKey === nextKey || isPreloadingNext) return;
+
+    isPreloadingNext = true;
+    try {
+      const url = await bridge.getTrackAudioUrl(nextTrackData);
+      if (!url || isCrossfading) return;
+      preloadedTrackKey = nextKey;
+      if (usingNativeAudio) return;
+      spareAudio.preload = 'auto';
+      spareAudio.src = url;
+      spareAudio.volume = 0;
+      spareAudio.load();
+    } catch (e) {
+      console.warn('Preload next track failed:', e);
+      preloadedTrackKey = null;
+    } finally {
+      isPreloadingNext = false;
+    }
+  }
+
+  async function maybeCrossfade() {
+    if (usingNativeAudio) return;
+    if (isCrossfading || !audio || !audio.duration || !isFinite(audio.duration) || audio.paused) return;
+    const cfSeconds = Number(typeof settings !== 'undefined' && settings?.crossfadeSeconds != null ? settings.crossfadeSeconds : 5);
+    if (cfSeconds <= 0) return;
+
+    const remaining = audio.duration - audio.currentTime;
+    if (remaining > cfSeconds || remaining <= 0.15) return;
+
+    if (currentIndex + 1 >= queue.length && !isRepeat) return;
+    const nextIdx = currentIndex + 1 < queue.length ? currentIndex + 1 : 0;
+    const nextTrackData = queue[nextIdx];
+    if (!nextTrackData) return;
+
+    isCrossfading = true;
+    const nextKey = getTrackKey(nextTrackData);
+
+    try {
+      if (!spareAudio.src || preloadedTrackKey !== nextKey) {
+        const url = await bridge.getTrackAudioUrl(nextTrackData);
+        if (!url || !isCrossfading) {
+          isCrossfading = false;
+          return;
+        }
+        preloadedTrackKey = nextKey;
+        spareAudio.preload = 'auto';
+        spareAudio.src = url;
+        spareAudio.volume = 0;
+        spareAudio.load();
+      }
+
+      if (spareAudio.readyState < 2) {
+        await new Promise((resolve, reject) => {
+          const onReady = () => { cleanup(); resolve(); };
+          const onErr = (err) => { cleanup(); reject(err); };
+          const timer = setTimeout(() => { cleanup(); resolve(); }, 2500);
+          const cleanup = () => {
+            clearTimeout(timer);
+            spareAudio.removeEventListener('canplay', onReady);
+            spareAudio.removeEventListener('loadeddata', onReady);
+            spareAudio.removeEventListener('error', onErr);
+          };
+          spareAudio.addEventListener('canplay', onReady, { once: true });
+          spareAudio.addEventListener('loadeddata', onReady, { once: true });
+          spareAudio.addEventListener('error', onErr, { once: true });
+        });
+      }
+
+      if (!isCrossfading) return;
+
+      spareAudio.volume = 0;
+      const playPromise = spareAudio.play();
+      if (playPromise) await playPromise;
+
+      const durationMs = Math.max(500, Math.min(cfSeconds, Math.max(0.5, audio.duration - audio.currentTime)) * 1000);
+      const stepMs = 50;
+      const totalSteps = Math.max(1, Math.round(durationMs / stepMs));
+      let step = 0;
+
+      crossfadeTimer = setInterval(() => {
+        if (!isCrossfading) {
+          clearInterval(crossfadeTimer);
+          crossfadeTimer = null;
+          return;
+        }
+
+        step += 1;
+        const progress = Math.min(1, step / totalSteps);
+        audio.volume = Math.max(0, Math.min(1, 1 - progress));
+        spareAudio.volume = Math.max(0, Math.min(1, progress));
+
+        if (progress >= 1) {
+          clearInterval(crossfadeTimer);
+          crossfadeTimer = null;
+
+          audio.pause();
+          audio.removeAttribute('src');
+          audio.load();
+
+          [audio, spareAudio] = [spareAudio, audio];
+          audio.volume = 1.0;
+          spareAudio.volume = 1.0;
+
+          isCrossfading = false;
+          preloadedTrackKey = null;
+
+          currentIndex = nextIdx;
+          currentTrack = queue[currentIndex];
+          isPlaying = true;
+
+          bridge.savePlaybackState({ queue, currentIndex });
+          if (currentTrack) bridge.recordHistory(currentTrack);
+          updateGlobalUI();
+          updateTimelineUI();
+
+          if (window.mintpyLyrics && window.mintpyLyrics.onTrackChange) {
+            window.mintpyLyrics.onTrackChange(currentTrack);
+          }
+          if (typeof updateMediaSession === 'function') {
+            updateMediaSession(currentTrack);
+          }
+
+          if (currentIndex + 1 >= queue.length) {
+            maybeAutoQueueRecommended(audio.duration || 0);
+          }
+        }
+      }, stepMs);
+    } catch (e) {
+      console.warn('Crossfade failed:', e);
+      isCrossfading = false;
+      if (audio) audio.volume = 1.0;
+    }
+  }
+
   // --- AUDIO SETUP & EVENTS ---
   function setupAudio() {
-    audio.ontimeupdate = () => {
-      updateTimelineUI();
-      if (window.mintpyLyrics && window.mintpyLyrics.onTimeUpdate) {
-        window.mintpyLyrics.onTimeUpdate(audio.currentTime);
+    window.__mintpyNativeAudioEvent = function (event, posMs, durMs, playing) {
+      if (!usingNativeAudio && !(event === 'sync' && nativeHasSource)) return;
+      nativeCurrentTime = Math.max(0, (Number(posMs) || 0) / 1000);
+      if (Number(durMs) > 0) nativeDuration = Number(durMs) / 1000;
+
+      if (event === 'prepared') {
+        consecutiveFailures = 0;
+        updateTimelineUI();
+      } else if (event === 'play') {
+        nativePaused = false;
+        isPlaying = true;
+        if (currentTrack) bridge.recordHistory(currentTrack);
+        updateGlobalUI();
+        updateTimelineUI();
+      } else if (event === 'pause') {
+        nativePaused = true;
+        isPlaying = false;
+        updateGlobalUI();
+        updateTimelineUI();
+      } else if (event === 'timeupdate') {
+        nativePaused = !playing;
+        isPlaying = !!playing;
+        updateTimelineUI();
+        checkAndPreloadNextTrack();
+        if (window.mintpyLyrics && window.mintpyLyrics.onTimeUpdate) {
+          window.mintpyLyrics.onTimeUpdate(nativeCurrentTime);
+        }
+      } else if (event === 'sync') {
+        nativePaused = !playing;
+        isPlaying = !!playing;
+        updateGlobalUI();
+        updateTimelineUI();
+      } else if (event === 'ended') {
+        nativePaused = true;
+        isPlaying = false;
+        updateGlobalUI();
+        if (isRepeat) {
+          playTrack(currentTrack, currentIndex);
+        } else {
+          nextTrack();
+        }
+      } else if (event === 'error') {
+        nativePaused = true;
+        isPlaying = false;
+        handlePlaybackFailure(playSessionId, 'Ошибка аудио (' + posMs + '/' + durMs + ')');
       }
     };
 
-    audio.onloadedmetadata = () => {
-      updateTimelineUI();
-    };
+    const decks = typeof deckA !== 'undefined' && typeof deckB !== 'undefined' ? [deckA, deckB] : [audio, spareAudio].filter(Boolean);
+    decks.forEach((deck) => {
+      deck.ontimeupdate = () => {
+        if (deck === audio) {
+          updateTimelineUI();
+          checkAndPreloadNextTrack();
+          maybeCrossfade();
+          if (window.mintpyLyrics && window.mintpyLyrics.onTimeUpdate) {
+            window.mintpyLyrics.onTimeUpdate(audio.currentTime);
+          }
+        }
+      };
 
-    audio.ondurationchange = () => {
-      updateTimelineUI();
-    };
+      deck.onloadedmetadata = () => {
+        if (deck === audio) updateTimelineUI();
+      };
 
-    audio.onplay = () => {
-      isPlaying = true;
-      if (currentTrack) bridge.recordHistory(currentTrack);
-      updateGlobalUI();
-    };
+      deck.ondurationchange = () => {
+        if (deck === audio) updateTimelineUI();
+      };
 
-    audio.onpause = () => {
-      isPlaying = false;
-      updateGlobalUI();
-    };
+      deck.onplay = () => {
+        if (deck === audio) {
+          isPlaying = true;
+          if (currentTrack) bridge.recordHistory(currentTrack);
+          updateGlobalUI();
+        }
+      };
 
-    audio.onended = () => {
-      if (isRepeat) {
-        playTrack(currentTrack, currentIndex);
-      } else {
-        nextTrack();
-      }
-    };
+      deck.onpause = () => {
+        if (deck === audio && !isCrossfading) {
+          isPlaying = false;
+          updateGlobalUI();
+        }
+      };
 
-    audio.onerror = () => {
-      console.warn('Audio playback error:', audio.error?.message || 'unknown');
-      isPlaying = false;
-      updateGlobalUI();
-      if (queue.length > 1) {
-        setTimeout(() => nextTrack(), 1000);
-      }
-    };
+      deck.onended = () => {
+        if (deck === audio && !isCrossfading) {
+          if (isRepeat) {
+            playTrack(currentTrack, currentIndex);
+          } else {
+            nextTrack();
+          }
+        }
+      };
+
+      deck.onerror = () => {
+        if (!deck.src || deck.src === window.location.href) return;
+        if (deck !== audio) return;
+        const err = deck.error;
+        const codeMap = { 1: 'Прервано', 2: 'Сбой сети (DPI/блок)', 3: 'Ошибка декодирования', 4: 'Формат не поддерживается' };
+        const desc = err ? (codeMap[err.code] || ('Код ' + err.code)) : 'Сбой аудио';
+        console.warn('Audio playback error:', desc, deck.src);
+        handlePlaybackFailure(playSessionId, desc);
+      };
+    });
   }
 
   // --- PLAYBACK CONTROL ---
   async function playTrack(track, index, newQueue = null) {
+    cancelCrossfade();
+    audio.volume = 1.0;
     if (!track) return;
-    if (newQueue) queue = [...newQueue];
+    const sessionId = ++playSessionId;
+    if (skipTimer) {
+      clearTimeout(skipTimer);
+      skipTimer = null;
+    }
+    if (newQueue) {
+      queue = [...newQueue];
+      consecutiveFailures = 0;
+    }
     currentIndex = index;
     currentTrack = track;
     isPlaying = false;
@@ -116,32 +625,89 @@
 
     try {
       audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
 
       // Resolve stream URL via Mobile Bridge
       const streamUrl = await bridge.getTrackAudioUrl(track);
+      if (sessionId !== playSessionId) return;
       if (!streamUrl) {
-        throw new Error('Unable to resolve audio stream');
+        throw new Error('Поток не найден: ' + (track.title || track.id));
       }
 
+      if (hasNativePlayer && (streamUrl.startsWith('http://') || streamUrl.startsWith('https://'))) {
+        usingNativeAudio = true;
+        nativeHasSource = true;
+        nativeCurrentTime = 0;
+        nativeDuration = Number(track.duration) || 0;
+        nativePaused = false;
+        try { audio.pause(); } catch (_) {}
+
+        window.AndroidNative.nativePlayUrl(
+          streamUrl,
+          track.title || 'MintPy',
+          track.artist || '',
+          track.album || 'MintPy',
+          track.artwork || '',
+          Number(track.duration) || 0
+        );
+
+        consecutiveFailures = 0;
+        isPlaying = true;
+        updateGlobalUI();
+        if (window.mintpyLyrics && window.mintpyLyrics.onTrackChange) {
+          window.mintpyLyrics.onTrackChange(track);
+        }
+        const nextIdx = currentIndex + 1;
+        if (nextIdx < queue.length && bridge.prefetchTrack) {
+          setTimeout(() => bridge.prefetchTrack(queue[nextIdx]), 800);
+        }
+        return;
+      }
+
+      if (usingNativeAudio && window.AndroidNative && typeof window.AndroidNative.nativeStopPlayer === 'function') {
+        window.AndroidNative.nativeStopPlayer();
+      }
+      usingNativeAudio = false;
+      nativeHasSource = false;
+
       audio.src = streamUrl;
+      audio.load();
+      audio.volume = 1.0;
+      audio.playbackRate = Math.max(0.5, Math.min(2.0, Number(settings.playbackSpeed) || 1.0));
       const playPromise = audio.play();
       if (playPromise) await playPromise;
+      if (sessionId !== playSessionId) return;
 
+      consecutiveFailures = 0;
       isPlaying = true;
       updateGlobalUI();
       if (window.mintpyLyrics && window.mintpyLyrics.onTrackChange) {
         window.mintpyLyrics.onTrackChange(track);
       }
+      const nextIdx = currentIndex + 1;
+      if (nextIdx < queue.length && bridge.prefetchTrack) {
+        setTimeout(() => bridge.prefetchTrack(queue[nextIdx]), 800);
+      }
     } catch (e) {
+      if (e && e.name === 'AbortError') return;
       console.error('Playback failed:', e);
-      isPlaying = false;
-      updateGlobalUI();
+      handlePlaybackFailure(sessionId, e.message || 'Сбой воспроизведения');
     }
   }
 
   function togglePlay() {
+    cancelCrossfade();
+    audio.volume = 1.0;
+    if (usingNativeAudio) {
+      if (!nativeHasSource && currentTrack) {
+        return playTrack(currentTrack, currentIndex);
+      }
+      if (nativePaused) {
+        if (window.AndroidNative && window.AndroidNative.nativeResume) window.AndroidNative.nativeResume();
+      } else {
+        if (window.AndroidNative && window.AndroidNative.nativePause) window.AndroidNative.nativePause();
+      }
+      return;
+    }
     if (!audio.src && currentTrack) {
       return playTrack(currentTrack, currentIndex);
     }
@@ -158,6 +724,8 @@
   }
 
   function nextTrack() {
+    cancelCrossfade();
+    audio.volume = 1.0;
     if (!queue.length) return;
     let nextIdx = currentIndex + 1;
     if (nextIdx >= queue.length) {
@@ -168,9 +736,18 @@
   }
 
   function prevTrack() {
+    cancelCrossfade();
+    audio.volume = 1.0;
     if (!queue.length) return;
-    if (audio.currentTime > 3) {
-      audio.currentTime = 0;
+    const curPos = usingNativeAudio ? nativeCurrentTime : (audio.currentTime || 0);
+    if (curPos > 3) {
+      if (usingNativeAudio) {
+        if (window.AndroidNative && window.AndroidNative.nativeSeekTo) window.AndroidNative.nativeSeekTo(0);
+        nativeCurrentTime = 0;
+        updateTimelineUI();
+      } else {
+        audio.currentTime = 0;
+      }
       return;
     }
     let prevIdx = currentIndex - 1;
@@ -200,15 +777,29 @@
   }
 
   function seekTo(fraction) {
-    if (!audio.duration || !isFinite(audio.duration)) return;
-    audio.currentTime = Math.max(0, Math.min(audio.duration, fraction * audio.duration));
-    updateTimelineUI();
+    cancelCrossfade();
+    audio.volume = 1.0;
+    const dur = usingNativeAudio ? (nativeDuration || currentTrack?.duration || 0) : (audio.duration || 0);
+    if (!dur || !isFinite(dur)) return;
+    const target = Math.max(0, Math.min(dur, fraction * dur));
+    if (usingNativeAudio) {
+      nativeCurrentTime = target;
+      if (window.AndroidNative && window.AndroidNative.nativeSeekTo) {
+        window.AndroidNative.nativeSeekTo(target);
+      }
+      updateTimelineUI(true);
+      return;
+    }
+    audio.currentTime = target;
+    updateTimelineUI(true);
   }
 
   // --- UI SYNC ---
-  function updateTimelineUI() {
-    const cur = audio.currentTime || 0;
-    const dur = audio.duration && isFinite(audio.duration) ? audio.duration : (currentTrack?.duration || 0);
+  function updateTimelineUI(forcePos = false) {
+    const cur = usingNativeAudio ? nativeCurrentTime : (audio.currentTime || 0);
+    const dur = usingNativeAudio
+      ? (nativeDuration || currentTrack?.duration || 0)
+      : (audio.duration && isFinite(audio.duration) ? audio.duration : (currentTrack?.duration || 0));
     const pct = dur > 0 ? (cur / dur) * 100 : 0;
 
     // Home timeline elements
@@ -224,6 +815,20 @@
     // Mini player progress fill
     const miniFill = $('#miniProgressFill');
     if (miniFill) miniFill.style.width = `${pct}%`;
+
+    if (!usingNativeAudio && window.updateMobilePositionState) {
+      window.updateMobilePositionState({ duration: dur, position: cur }, forcePos);
+    }
+  }
+
+  function syncMobileTrackRows() {
+    const curKey = currentTrack ? String(currentTrack.id || '') : '';
+    $$('#viewRoot .track-row[data-track-id]').forEach(r => {
+      const act = !!curKey && r.dataset.trackId === curKey;
+      r.classList.toggle('active', act);
+      const eq = r.querySelector('.m-eq-bars');
+      if (eq) eq.classList.toggle('paused', !isPlaying);
+    });
   }
 
   function updateGlobalUI() {
@@ -238,19 +843,44 @@
     const homeRepeatBtn = $('#homeRepeatBtn');
     const homeFavBtn = $('#homeFavBtn');
 
+    const trackKey = currentTrack ? getTrackKey(currentTrack) : null;
+    const trackChanged = !!currentTrack && trackKey !== lastAnimatedTrackId;
+    if (trackKey) {
+      lastAnimatedTrackId = trackKey;
+    } else {
+      lastAnimatedTrackId = null;
+    }
+
     if (homeCover && currentTrack) {
       homeCover.src = safeArtwork(currentTrack.artwork);
       if (homeVinylLabel) homeVinylLabel.src = safeArtwork(currentTrack.artwork);
       if (homeTitle) homeTitle.textContent = currentTrack.title || 'Untitled';
       if (homeArtist) homeArtist.textContent = currentTrack.artist || 'Unknown';
+      if (trackChanged) {
+        triggerAnim(homeCover, 'track-swap', 400);
+        triggerAnim(homeTitle, 'track-swap', 340);
+        triggerAnim(homeArtist, 'track-swap', 340);
+      }
     }
 
     if (homeVinyl) {
       homeVinyl.classList.toggle('playing', isPlaying);
     }
+    const homeStage = $('.home-art-stage');
+    if (homeStage) {
+      homeStage.classList.toggle('playing', isPlaying);
+    }
+    updateDynamicArtBg();
+
+    const playStateChanged = lastPlayIconState !== isPlaying;
+    if (playStateChanged) {
+      lastPlayIconState = isPlaying;
+    }
 
     if (homePlayBtn) {
       homePlayBtn.innerHTML = isPlaying ? icon('pause') : icon('play');
+      homePlayBtn.classList.toggle('playing', isPlaying);
+      if (playStateChanged) triggerAnim(homePlayBtn, 'icon-pop', 280);
     }
     if (homeShuffleBtn) {
       homeShuffleBtn.classList.toggle('active', isShuffle);
@@ -260,11 +890,17 @@
     }
 
     if (homeFavBtn && currentTrack) {
-      bridge.getFavorites().then(favs => {
-        const isFaved = favs.some(f => f.id === currentTrack.id);
+      if (typeof bridge.isFavoriteSync === 'function') {
+        const isFaved = bridge.isFavoriteSync(currentTrack.id);
         homeFavBtn.innerHTML = isFaved ? icon('heart') : icon('heart-o');
         homeFavBtn.classList.toggle('active', isFaved);
-      });
+      } else {
+        bridge.getFavorites().then(favs => {
+          const isFaved = favs.some(f => f.id === currentTrack.id);
+          homeFavBtn.innerHTML = isFaved ? icon('heart') : icon('heart-o');
+          homeFavBtn.classList.toggle('active', isFaved);
+        });
+      }
     }
 
     // 2. Mini Player
@@ -281,14 +917,18 @@
       miniTitle.textContent = currentTrack.title || 'Untitled';
       miniArtist.textContent = currentTrack.artist || 'Unknown';
       miniPlayBtn.innerHTML = isPlaying ? icon('pause') : icon('play');
+      if (playStateChanged) triggerAnim(miniPlayBtn, 'icon-pop', 280);
       if (miniArtDisc) miniArtDisc.classList.toggle('playing', isPlaying);
     } else {
       miniPlayer.classList.remove('visible');
     }
 
-    // 3. Android MediaSession & Notification Lockscreen
-    if (window.updateMobileMediaSession) {
-      window.updateMobileMediaSession(currentTrack, isPlaying);
+    syncMobileTrackRows();
+    window.isPlaying = isPlaying;
+
+    // 3. Android MediaSession & Notification Lockscreen (handled natively by PlaybackService for stream tracks)
+    if (!usingNativeAudio && window.updateMobileMediaSession) {
+      window.updateMobileMediaSession(currentTrack, isPlaying, audio.currentTime || 0);
     }
   }
 
@@ -301,6 +941,7 @@
     });
 
     const root = $('#viewRoot');
+    root.scrollTop = 0;
     root.innerHTML = '';
 
     if (viewName === 'home') renderHome(root);
@@ -308,7 +949,7 @@
     else if (viewName === 'favorites') renderFavorites(root, 'favorites');
     else if (viewName === 'history') renderFavorites(root, 'history');
     else if (viewName === 'playlists') renderPlaylists(root);
-    else if (viewName === 'settings') renderSettings(root);
+    else if (viewName === 'settings') renderSettings(root, true);
 
     updateGlobalUI();
   }
@@ -320,9 +961,9 @@
     const art = currentTrack?.artist || 'Choose a track in Search';
 
     container.innerHTML = `
-      <div class="home-container">
+      <div class="home-container view-enter">
         <!-- Turntable Stage: Vinyl is strictly smaller than cover so it never protrudes top/bottom -->
-        <div class="home-art-stage">
+        <div class="home-art-stage ${isPlaying ? 'playing' : ''}" id="homeArtStage">
           <img class="home-cover" id="homeCover" src="${artUrl}" alt="Album Art">
           <div class="home-vinyl ${isPlaying ? 'playing' : ''}" id="homeVinyl">
             <img class="home-vinyl-label" id="homeVinylLabel" src="${artUrl}" alt="Vinyl Label">
@@ -377,6 +1018,9 @@
           <button class="home-sub-btn" id="homeAddToPlBtn">
             ${icon('add-to-list')} <span>В плейлист</span>
           </button>
+          <button class="home-sub-btn" id="homeQueueBtn">
+            ${icon('queue')} <span>Очередь</span>
+          </button>
           <button class="home-sub-btn" id="homeLyricsBtn">
             ${icon('lyrics')} <span>Текст</span>
           </button>
@@ -384,25 +1028,58 @@
       </div>
     `;
 
-    // Bind Home UI
+    // Bind Home UI + Horizontal Swipe Gestures on Stage
+    let stageSwiped = false;
+    const stageEl = $('#homeArtStage');
+    if (stageEl) {
+      let startX = 0;
+      let startY = 0;
+      stageEl.addEventListener('touchstart', (e) => {
+        if (!e.touches || !e.touches[0]) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        stageSwiped = false;
+      }, { passive: true });
+      stageEl.addEventListener('touchend', (e) => {
+        if (!e.changedTouches || !e.changedTouches[0]) return;
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+          stageSwiped = true;
+          stageEl.style.transform = `translateX(${dx < 0 ? -18 : 18}px)`;
+          setTimeout(() => { if (stageEl) stageEl.style.transform = ''; }, 180);
+          if (dx < 0) nextTrack();
+          else prevTrack();
+        }
+      }, { passive: true });
+    }
+
+    const onStageTap = () => {
+      if (stageSwiped) { stageSwiped = false; return; }
+      togglePlay();
+    };
     $('#homePlayBtn').onclick = togglePlay;
     const coverEl = $('#homeCover');
-    if (coverEl) coverEl.onclick = togglePlay;
+    if (coverEl) coverEl.onclick = onStageTap;
     const vinylEl = $('#homeVinyl');
-    if (vinylEl) vinylEl.onclick = togglePlay;
+    if (vinylEl) vinylEl.onclick = onStageTap;
     $('#homePrevBtn').onclick = prevTrack;
     $('#homeNextBtn').onclick = nextTrack;
     $('#homeShuffleBtn').onclick = toggleShuffle;
     $('#homeRepeatBtn').onclick = toggleRepeat;
+    const queueBtn = $('#homeQueueBtn');
+    if (queueBtn) queueBtn.onclick = openQueueSheet;
 
     $('#homeFavBtn').onclick = async () => {
       if (!currentTrack) return;
+      const favBtn = $('#homeFavBtn');
       const favs = await bridge.getFavorites();
       const isFaved = favs.some(f => f.id === currentTrack.id);
       if (isFaved) {
         await bridge.removeFavorite(currentTrack.id);
       } else {
         await bridge.addFavorite(currentTrack);
+        triggerAnim(favBtn, 'fav-pop', 400);
       }
       updateGlobalUI();
     };
@@ -446,23 +1123,132 @@
       seekTo(frac);
     };
 
-    seekBar.onmousedown = (e) => { seekDragging = true; handleSeek(e); };
-    seekBar.ontouchstart = (e) => { seekDragging = true; handleSeek(e); };
+    seekBar.onmousedown = (e) => { seekDragging = true; seekBar.classList.add('seeking'); handleSeek(e); };
+    seekBar.ontouchstart = (e) => { seekDragging = true; seekBar.classList.add('seeking'); handleSeek(e); };
     window.onmousemove = (e) => { if (seekDragging) handleSeek(e); };
     window.ontouchmove = (e) => { if (seekDragging) handleSeek(e); };
-    window.onmouseup = () => { seekDragging = false; };
-    window.ontouchend = () => { seekDragging = false; };
+    window.onmouseup = () => { seekDragging = false; seekBar.classList.remove('seeking'); };
+    window.ontouchend = () => { seekDragging = false; seekBar.classList.remove('seeking'); };
+    window.ontouchcancel = () => { seekDragging = false; seekBar.classList.remove('seeking'); };
 
     updateTimelineUI();
+  }
+
+  function openQueueSheet() {
+    const prev = document.getElementById('queueSheetOverlay');
+    if (prev) prev.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'queueSheetOverlay';
+    overlay.className = 'queue-sheet-overlay';
+
+    const closeSheet = () => {
+      if (overlay.classList.contains('closing')) return;
+      overlay.classList.add('closing');
+      setTimeout(() => overlay.remove(), 210);
+    };
+
+    overlay.innerHTML = `
+      <div class="queue-sheet">
+        <div class="queue-sheet-header">
+          <div class="queue-sheet-title" id="qCountTitle">Очередь (${queue.length})</div>
+          <div class="queue-sheet-actions">
+            <button class="chip-btn" id="qShuffleBtn">${icon('shuffle')}</button>
+            <button class="chip-btn" id="qClearBtn">Очистить</button>
+            <button class="chip-btn" id="qCloseBtn">&times;</button>
+          </div>
+        </div>
+        <div class="queue-list" id="qList"></div>
+      </div>
+    `;
+
+    const renderList = (animateRows = false) => {
+      const titleEl = overlay.querySelector('#qCountTitle');
+      const listEl = overlay.querySelector('#qList');
+      if (titleEl) titleEl.textContent = `Очередь (${queue.length})`;
+      if (!listEl) return;
+
+      listEl.innerHTML = queue.length ? queue.map((t, i) => `
+        <div class="queue-item ${i === currentIndex ? 'current' : ''}${animateRows ? ' q-enter' : ''}" data-qidx="${i}"${animateRows ? ` style="--row-i:${Math.min(i, 12)}"` : ''}>
+          <img src="${safeArtwork(t.artwork)}" alt="" loading="lazy">
+          <div class="queue-item-meta">
+            <div class="queue-item-title">${esc(t.title || 'Без названия')}</div>
+            <div class="queue-item-artist">${esc(t.artist || '')}</div>
+          </div>
+          <span class="m-eq-bars ${isPlaying ? '' : 'paused'}" aria-hidden="true"><i></i><i></i><i></i></span>
+          <button class="queue-remove-btn" data-qdel="${i}" title="Убрать">&times;</button>
+        </div>
+      `).join('') : '<div class="empty-state" style="padding:28px 12px;"><p>Очередь пуста</p></div>';
+    };
+
+    const closeBtn = overlay.querySelector('#qCloseBtn');
+    if (closeBtn) closeBtn.onclick = closeSheet;
+
+    const shufBtn = overlay.querySelector('#qShuffleBtn');
+    if (shufBtn) shufBtn.onclick = () => { toggleShuffle(); renderList(false); };
+
+    const clrBtn = overlay.querySelector('#qClearBtn');
+    if (clrBtn) clrBtn.onclick = () => {
+      if (currentTrack && currentIndex >= 0) {
+        queue = [currentTrack];
+        currentIndex = 0;
+      } else {
+        queue = [];
+        currentIndex = -1;
+      }
+      bridge.savePlaybackState({ queue, currentIndex });
+      updateGlobalUI();
+      renderList(false);
+    };
+
+    const listEl = overlay.querySelector('#qList');
+    if (listEl) {
+      listEl.onclick = (e) => {
+        const delBtn = e.target.closest('[data-qdel]');
+        if (delBtn) {
+          e.stopPropagation();
+          const idx = parseInt(delBtn.dataset.qdel, 10);
+          if (!Number.isFinite(idx) || idx < 0 || idx >= queue.length) return;
+          queue.splice(idx, 1);
+          if (queue.length === 0) {
+            currentIndex = -1;
+          } else if (idx < currentIndex) {
+            currentIndex--;
+          } else if (idx === currentIndex && currentIndex >= queue.length) {
+            currentIndex = queue.length - 1;
+          }
+          bridge.savePlaybackState({ queue, currentIndex });
+          updateGlobalUI();
+          renderList(false);
+          return;
+        }
+        const itemEl = e.target.closest('[data-qidx]');
+        if (itemEl) {
+          const idx = parseInt(itemEl.dataset.qidx, 10);
+          if (queue[idx]) {
+            playTrack(queue[idx], idx);
+            renderList(false);
+          }
+        }
+      };
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeSheet();
+    });
+
+    document.body.appendChild(overlay);
+    renderList(true);
   }
 
   // ==================== SEARCH VIEW RENDERER ====================
   let lastSearchQuery = '';
   let lastSearchResults = [];
+  let searchSeq = 0;
 
   function renderSearch(container) {
     container.innerHTML = `
-      <div class="search-container">
+      <div class="search-container view-enter">
         <div class="search-box-row">
           <svg class="search-input-icon"><use href="#ico-search"/></svg>
           <input type="text" class="search-input" id="mobileSearchInput" placeholder="Поиск треков или исполнителей..." value="${esc(lastSearchQuery)}">
@@ -485,11 +1271,13 @@
     const doSearch = async () => {
       const q = input.value.trim();
       if (!q) return;
+      const mySeq = ++searchSeq;
       lastSearchQuery = q;
       resultsContainer.innerHTML = '<div class="empty-state"><p>Поиск треков...</p></div>';
 
       try {
         const tracks = await bridge.searchTracks(q);
+        if (mySeq !== searchSeq) return;
         lastSearchResults = tracks;
         if (!tracks || !tracks.length) {
           resultsContainer.innerHTML = '<div class="empty-state"><h3>Ничего не найдено</h3><p>Попробуйте другой запрос</p></div>';
@@ -497,6 +1285,7 @@
         }
         renderTrackRows(resultsContainer, tracks);
       } catch (e) {
+        if (mySeq !== searchSeq) return;
         resultsContainer.innerHTML = `<div class="empty-state"><h3>Ошибка поиска</h3><p>${esc(e.message)}</p></div>`;
       }
     };
@@ -507,12 +1296,13 @@
 
   function renderTrackRows(container, tracks) {
     container.innerHTML = tracks.map((t, idx) => `
-      <div class="track-row ${currentTrack?.id === t.id ? 'active' : ''}" data-idx="${idx}">
-        <img class="track-thumb" src="${safeArtwork(t.artwork)}" alt="">
+      <div class="track-row ${currentTrack?.id === t.id ? 'active' : ''}" data-idx="${idx}" data-track-id="${esc(t.id)}" style="--row-i:${Math.min(idx, 12)}">
+        <img class="track-thumb" loading="lazy" decoding="async" src="${safeArtwork(t.artwork)}" alt="">
         <div class="track-info">
           <span class="track-ttl">${esc(t.title)}</span>
           <span class="track-art">${esc(t.artist)}</span>
         </div>
+        <span class="m-eq-bars ${isPlaying ? '' : 'paused'}" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="track-dur">${fmtTime(t.duration)}</span>
         <button class="track-action-btn fav-btn" data-id="${esc(t.id)}" title="Любимое">
           ${icon('heart-o')}
@@ -547,6 +1337,7 @@
           await bridge.addFavorite(t);
           favBtn.classList.add('faved');
           favBtn.innerHTML = icon('heart');
+          triggerAnim(favBtn, 'fav-pop', 400);
         }
         return;
       }
@@ -565,11 +1356,11 @@
     const favs = await bridge.getFavorites();
     const history = await bridge.getHistory();
 
-    function renderTab() {
+    function renderTab(isInitial = false) {
       const isFav = currentTab === 'favorites';
       const count = isFav ? favs.length : history.length;
       container.innerHTML = `
-        <div class="search-container">
+        <div class="search-container${isInitial ? ' view-enter' : ''}">
           <div class="sub-nav-segment">
             <button class="sub-nav-btn ${isFav ? 'active' : ''}" id="tabFavsBtn">
               ${icon('heart')} <span>Любимое (${favs.length})</span>
@@ -596,8 +1387,8 @@
         </div>
       `;
 
-      $('#tabFavsBtn').onclick = () => { currentTab = 'favorites'; renderTab(); };
-      $('#tabHistBtn').onclick = () => { currentTab = 'history'; renderTab(); };
+      $('#tabFavsBtn').onclick = () => { currentTab = 'favorites'; renderTab(false); };
+      $('#tabHistBtn').onclick = () => { currentTab = 'history'; renderTab(false); };
 
       const clearBtn = $('#clearHistBtn');
       if (clearBtn) {
@@ -605,7 +1396,7 @@
           if (confirm('Очистить историю прослушивания?')) {
             await bridge.clearHistory();
             history.length = 0;
-            renderTab();
+            renderTab(false);
           }
         };
       }
@@ -618,14 +1409,14 @@
       }
     }
 
-    renderTab();
+    renderTab(true);
   }
 
   // ==================== PLAYLISTS VIEW RENDERER ====================
   async function renderPlaylists(container) {
     const pls = await bridge.getPlaylists();
     container.innerHTML = `
-      <div class="search-container">
+      <div class="search-container view-enter">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
           <h2 style="font-family:var(--font-serif);font-size:18px;margin:0;">Плейлисты (${pls.length})</h2>
           <div style="display:flex;gap:6px;">
@@ -680,6 +1471,7 @@
       importToggleBtn.onclick = () => {
         const isHidden = importCard.style.display === 'none';
         importCard.style.display = isHidden ? 'block' : 'none';
+        importCard.classList.toggle('open', isHidden);
         if (isHidden && importUrlInput) importUrlInput.focus();
       };
     }
@@ -748,8 +1540,8 @@
 
     if (pls.length) {
       const plCont = $('#plContainer');
-      plCont.innerHTML = pls.map(p => `
-        <div class="track-row" data-plid="${esc(p.id)}">
+      plCont.innerHTML = pls.map((p, idx) => `
+        <div class="track-row" data-plid="${esc(p.id)}" style="--row-i:${Math.min(idx, 12)}">
           <div style="width:44px;height:44px;border-radius:var(--radius-sm);background:var(--surface-hover);display:flex;align-items:center;justify-content:center;color:var(--accent);">
             ${icon('playlist')}
           </div>
@@ -827,7 +1619,7 @@
   async function renderPlaylistDetail(container, playlist) {
     const tracks = playlist.tracks || [];
     container.innerHTML = `
-      <div class="search-container">
+      <div class="search-container view-enter">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
           <button class="track-action-btn" id="plBackBtn" title="Назад" style="width:36px;height:36px;">
             ${icon('back')}
@@ -870,12 +1662,13 @@
     if (tracks.length) {
       const listEl = $('#plDetailTracks');
       listEl.innerHTML = tracks.map((t, i) => `
-        <div class="track-row" data-idx="${i}">
-          <img class="track-thumb" src="${safeArtwork(t.artwork)}" alt="">
+        <div class="track-row ${currentTrack?.id === t.id ? 'active' : ''}" data-idx="${i}" data-track-id="${esc(t.id)}" style="--row-i:${Math.min(i, 12)}">
+          <img class="track-thumb" loading="lazy" decoding="async" src="${safeArtwork(t.artwork)}" alt="">
           <div class="track-info">
             <span class="track-ttl">${esc(t.title)}</span>
             <span class="track-art">${esc(t.artist)}${t.duration ? ' · ' + fmtTime(t.duration) : ''}</span>
           </div>
+          <span class="m-eq-bars ${isPlaying ? '' : 'paused'}" aria-hidden="true"><i></i><i></i><i></i></span>
           <button class="track-action-btn pl-remove-btn" data-idx="${i}" title="Удалить из плейлиста">
             ${icon('trash')}
           </button>
@@ -912,18 +1705,17 @@
   }
 
   // ==================== SETTINGS VIEW (CLEAN MOBILE) ====================
-  function renderSettings(container) {
-    const styles = [
-      { id: 'zen', name: 'Zen', emoji: '🎋' },
-      { id: 'lofi', name: 'Lo-Fi', emoji: '☕' },
-      { id: 'synthwave', name: 'Synthwave', emoji: '🌆' },
-      { id: 'ocean', name: 'Ocean', emoji: '🌊' },
-      { id: 'forest', name: 'Forest', emoji: '🌲' },
-      { id: 'aurora', name: 'Aurora', emoji: '✨' }
-    ];
+  function renderSettings(container, animate = true) {
+    const styles = THEME_LIST;
+    const eq = settings.eqBands || { low: 0, mid: 0, high: 0 };
+    const isPresetMatch = (p) =>
+      Number(eq.low || 0) === p.bands.low &&
+      Number(eq.mid || 0) === p.bands.mid &&
+      Number(eq.high || 0) === p.bands.high;
+    const curSpeed = Number(settings.playbackSpeed) || 1.0;
 
     container.innerHTML = `
-      <div class="settings-container">
+      <div class="settings-container${animate ? ' view-enter' : ' no-enter'}">
         <!-- 1. Style Theme -->
         <div class="settings-group">
           <div class="group-title">🎨 Тема оформления</div>
@@ -950,6 +1742,23 @@
               <button class="segment-btn ${settings.appearance === 'light' ? 'active' : ''}" data-app="light">Светлая</button>
             </div>
           </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <span class="setting-title">Динамический фон обложки</span>
+              <span class="setting-desc">Размытый цветной фон из обложки трека</span>
+            </div>
+            <input type="checkbox" id="setDynamicArtBg" ${settings.dynamicArtBg ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--accent);">
+          </div>
+        </div>
+
+        <!-- 2b. Quick Tools (moved from removed top bar) -->
+        <div class="settings-group">
+          <div class="group-title">✨ Инструменты</div>
+          <div class="backup-actions" style="flex-wrap:wrap;">
+            <button class="action-btn" id="setHistoryBtn">${icon('history')} <span>История</span></button>
+            <button class="action-btn" id="setAmbientBtn">${icon('leaf')} <span>Атмосфера</span></button>
+            <button class="action-btn" id="setSleepBtn">${icon('timer')} <span>Таймер сна</span></button>
+          </div>
         </div>
 
         <!-- 3. Audio & Equalizer -->
@@ -972,21 +1781,39 @@
             <input type="range" id="setCrossfade" min="0" max="10" step="1" value="${settings.crossfadeSeconds || 0}" style="width:120px;accent-color:var(--accent);">
           </div>
 
+          <div>
+            <div class="setting-desc" style="margin-bottom:4px;">Скорость воспроизведения</div>
+            <div class="chip-row" id="speedPresetRow">
+              ${SPEED_OPTIONS.map(s => `
+                <button class="chip-btn ${Math.abs(curSpeed - s) < 0.01 ? 'active' : ''}" data-speed="${s}">${s}x</button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div>
+            <div class="setting-desc" style="margin-bottom:4px;">Пресеты эквалайзера</div>
+            <div class="chip-row" id="eqPresetRow">
+              ${EQ_PRESETS.map(p => `
+                <button class="chip-btn ${isPresetMatch(p) ? 'active' : ''}" data-eqpreset="${p.id}">${p.label}</button>
+              `).join('')}
+            </div>
+          </div>
+
           <div class="eq-sliders" style="margin-top:6px;">
             <div class="eq-row">
               <span class="eq-name">Бас</span>
-              <input type="range" class="eq-slider" id="eqLow" min="-12" max="12" step="1" value="${settings.eqBands?.low || 0}">
-              <span class="eq-val" id="eqLowVal">${settings.eqBands?.low || 0}dB</span>
+              <input type="range" class="eq-slider" id="eqLow" min="-12" max="12" step="1" value="${eq.low || 0}">
+              <span class="eq-val" id="eqLowVal">${(eq.low || 0) > 0 ? '+' : ''}${eq.low || 0}dB</span>
             </div>
             <div class="eq-row">
               <span class="eq-name">Средние</span>
-              <input type="range" class="eq-slider" id="eqMid" min="-12" max="12" step="1" value="${settings.eqBands?.mid || 0}">
-              <span class="eq-val" id="eqMidVal">${settings.eqBands?.mid || 0}dB</span>
+              <input type="range" class="eq-slider" id="eqMid" min="-12" max="12" step="1" value="${eq.mid || 0}">
+              <span class="eq-val" id="eqMidVal">${(eq.mid || 0) > 0 ? '+' : ''}${eq.mid || 0}dB</span>
             </div>
             <div class="eq-row">
               <span class="eq-name">Высокие</span>
-              <input type="range" class="eq-slider" id="eqHigh" min="-12" max="12" step="1" value="${settings.eqBands?.high || 0}">
-              <span class="eq-val" id="eqHighVal">${settings.eqBands?.high || 0}dB</span>
+              <input type="range" class="eq-slider" id="eqHigh" min="-12" max="12" step="1" value="${eq.high || 0}">
+              <span class="eq-val" id="eqHighVal">${(eq.high || 0) > 0 ? '+' : ''}${eq.high || 0}dB</span>
             </div>
           </div>
         </div>
@@ -1018,7 +1845,7 @@
         <div class="settings-group">
           <div class="group-title">ℹ️ О MintPy Mobile</div>
           <div class="setting-desc" style="line-height:1.6;">
-            <strong>MintPy Mobile v5.3.8</strong><br>
+            <strong>MintPy Mobile v5.4.6</strong><br>
             Автор: <strong>Иван Dasert</strong><br>
             Портативный дзэн-плеер с фоновыми атмосферами.
           </div>
@@ -1026,20 +1853,42 @@
       </div>
     `;
 
+    container.querySelectorAll('.settings-group').forEach((g, idx) => {
+      g.style.setProperty('--row-i', String(Math.min(idx, 7)));
+    });
+
     // Bind Settings
     $$('.style-card').forEach(card => {
       card.onclick = () => {
         applyStyle(card.dataset.style);
-        renderSettings(container);
+        renderSettings(container, false);
       };
     });
 
     $$('.segment-btn[data-app]').forEach(btn => {
       btn.onclick = () => {
         applyAppearance(btn.dataset.app);
-        renderSettings(container);
+        renderSettings(container, false);
       };
     });
+
+    const dynBgEl = $('#setDynamicArtBg');
+    if (dynBgEl) {
+      dynBgEl.onchange = (e) => {
+        settings.dynamicArtBg = e.target.checked;
+        updateDynamicArtBg();
+        bridge.saveSettings(settings);
+      };
+    }
+
+    const setHistBtn = $('#setHistoryBtn');
+    if (setHistBtn) setHistBtn.onclick = () => navigate('history');
+
+    const setAmbBtn = $('#setAmbientBtn');
+    if (setAmbBtn) setAmbBtn.onclick = () => window.mintpyAmbient && window.mintpyAmbient.toggle();
+
+    const setSleepBtn = $('#setSleepBtn');
+    if (setSleepBtn) setSleepBtn.onclick = () => window.mintpySleepTimer && window.mintpySleepTimer.toggle();
 
     $('#setNorm').onchange = (e) => {
       settings.volumeNormalize = e.target.checked;
@@ -1053,6 +1902,43 @@
       bridge.saveSettings(settings);
     };
 
+    $$('[data-speed]').forEach(btn => {
+      btn.onclick = () => {
+        const s = Number(btn.dataset.speed) || 1.0;
+        settings.playbackSpeed = s;
+        syncPlaybackSpeed();
+        bridge.saveSettings(settings);
+        $$('[data-speed]').forEach(b => b.classList.toggle('active', b === btn));
+      };
+    });
+
+    const refreshEqPresetHighlight = () => {
+      const cur = settings.eqBands || {};
+      $$('[data-eqpreset]').forEach(btn => {
+        const p = EQ_PRESETS.find(x => x.id === btn.dataset.eqpreset);
+        const match = !!(p && Number(cur.low || 0) === p.bands.low && Number(cur.mid || 0) === p.bands.mid && Number(cur.high || 0) === p.bands.high);
+        btn.classList.toggle('active', match);
+      });
+    };
+
+    $$('[data-eqpreset]').forEach(btn => {
+      btn.onclick = () => {
+        const p = EQ_PRESETS.find(x => x.id === btn.dataset.eqpreset);
+        if (!p) return;
+        settings.eqBands = { ...p.bands };
+        const map = [['#eqLow', '#eqLowVal', p.bands.low], ['#eqMid', '#eqMidVal', p.bands.mid], ['#eqHigh', '#eqHighVal', p.bands.high]];
+        map.forEach(([sliderSel, valSel, v]) => {
+          const sl = $(sliderSel);
+          const vl = $(valSel);
+          if (sl) sl.value = v;
+          if (vl) vl.textContent = `${v > 0 ? '+' : ''}${v}dB`;
+        });
+        refreshEqPresetHighlight();
+        syncNativeEq();
+        bridge.saveSettings(settings);
+      };
+    });
+
     const bindEq = (id, band, valId) => {
       const el = $(id);
       if (el) {
@@ -1061,6 +1947,8 @@
           if (!settings.eqBands) settings.eqBands = {};
           settings.eqBands[band] = v;
           $(valId).textContent = `${v > 0 ? '+' : ''}${v}dB`;
+          refreshEqPresetHighlight();
+          syncNativeEq();
           bridge.saveSettings(settings);
         };
       }
@@ -1108,12 +1996,9 @@
     document.body.setAttribute('data-style', styleName);
     const appEl = $('.mobile-app');
     if (appEl) appEl.setAttribute('data-style', styleName);
-    const styleTags = {
-      zen: 'Zen 🎋', lofi: 'Lo-Fi ☕', synthwave: 'Synthwave 🌆',
-      ocean: 'Ocean 🌊', forest: 'Forest 🌲', aurora: 'Aurora ✨'
-    };
+    const found = THEME_LIST.find(t => t.id === styleName);
     const tag = $('#headerStyleTag');
-    if (tag) tag.textContent = styleTags[styleName] || styleName;
+    if (tag) tag.textContent = found ? `${found.name} ${found.emoji}` : styleName;
     bridge.saveSettings(settings);
   }
 
@@ -1138,6 +2023,9 @@
     document.body.setAttribute('data-theme', mode);
     const appEl = $('.mobile-app');
     if (appEl) appEl.setAttribute('data-theme', mode);
+    if (window.AndroidNative && typeof window.AndroidNative.setLightStatusBar === 'function') {
+      try { window.AndroidNative.setLightStatusBar(mode === 'light'); } catch (_) {}
+    }
     updateThemeButtonUI();
     bridge.saveSettings(settings);
   }
@@ -1147,10 +2035,35 @@
     setupAudio();
 
     // Load saved settings
-    settings = await bridge.getSettings();
+    const loadedSettings = await bridge.getSettings();
+    settings = {
+      appearance: 'dark',
+      style: 'zen',
+      volumeNormalize: false,
+      eqBands: { low: 0, mid: 0, high: 0 },
+      crossfadeSeconds: 5,
+      dynamicArtBg: false,
+      playbackSpeed: 1.0,
+      ...(loadedSettings || {})
+    };
     applyStyle(settings.style || 'zen');
     applyAppearance(settings.appearance || 'dark');
     updateThemeButtonUI();
+    syncNativeEq();
+    syncPlaybackSpeed();
+    updateDynamicArtBg();
+
+    const styleTag = $('#headerStyleTag');
+    if (styleTag) {
+      styleTag.onclick = () => {
+        const curIdx = THEME_LIST.findIndex(t => t.id === settings.style);
+        const nextTheme = THEME_LIST[(curIdx + 1) % THEME_LIST.length];
+        applyStyle(nextTheme.id);
+        triggerAnim(styleTag, 'tag-pop', 360);
+        showToast(`Тема: ${nextTheme.name} ${nextTheme.emoji}`, 'info');
+        if (currentView === 'settings') renderSettings($('#viewRoot'), false);
+      };
+    }
 
     // Restore last playback state
     const savedState = await bridge.getPlaybackState();
@@ -1189,10 +2102,60 @@
     window.isPlaying = isPlaying;
 
     // MediaSession Bridge Commands
-    bridge.onMediaCommand((cmd) => {
-      if (cmd === 'play-pause') togglePlay();
+    bridge.onMediaCommand((cmd, arg) => {
+      if (cmd === 'play') {
+        if (usingNativeAudio) {
+          if (window.AndroidNative && window.AndroidNative.nativeResume) window.AndroidNative.nativeResume();
+        } else if (audio.src && audio.paused) audio.play().catch(() => {});
+        else if (!audio.src) togglePlay();
+      } else if (cmd === 'pause') {
+        if (usingNativeAudio) {
+          if (window.AndroidNative && window.AndroidNative.nativePause) window.AndroidNative.nativePause();
+        } else if (!audio.paused) audio.pause();
+      } else if (cmd === 'play-pause') togglePlay();
       else if (cmd === 'next-track') nextTrack();
       else if (cmd === 'prev-track') prevTrack();
+      else if (cmd === 'seek-to') {
+        cancelCrossfade();
+        audio.volume = 1.0;
+        const target = Number(arg);
+        if (usingNativeAudio) {
+          const dur = nativeDuration || (currentTrack && Number(currentTrack.duration)) || 0;
+          if (Number.isFinite(target) && dur > 0) {
+            nativeCurrentTime = Math.max(0, Math.min(dur, target));
+            if (window.AndroidNative && window.AndroidNative.nativeSeekTo) window.AndroidNative.nativeSeekTo(nativeCurrentTime);
+            updateTimelineUI(true);
+          }
+        } else if (Number.isFinite(target) && audio.duration && isFinite(audio.duration)) {
+          audio.currentTime = Math.max(0, Math.min(audio.duration, target));
+          updateTimelineUI(true);
+        }
+      } else if (cmd === 'seek-by') {
+        cancelCrossfade();
+        audio.volume = 1.0;
+        const delta = Number(arg);
+        if (usingNativeAudio) {
+          const dur = nativeDuration || (currentTrack && Number(currentTrack.duration)) || 0;
+          if (Number.isFinite(delta) && dur > 0) {
+            nativeCurrentTime = Math.max(0, Math.min(dur, nativeCurrentTime + delta));
+            if (window.AndroidNative && window.AndroidNative.nativeSeekTo) window.AndroidNative.nativeSeekTo(nativeCurrentTime);
+            updateTimelineUI(true);
+          }
+        } else if (Number.isFinite(delta) && audio.duration && isFinite(audio.duration)) {
+          audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + delta));
+          updateTimelineUI(true);
+        }
+      } else if (cmd === 'stop') {
+        cancelCrossfade();
+        if (usingNativeAudio && window.AndroidNative && window.AndroidNative.stopNativeMediaSession) {
+          window.AndroidNative.stopNativeMediaSession();
+          nativePaused = true;
+        } else {
+          audio.pause();
+        }
+        isPlaying = false;
+        updateGlobalUI();
+      }
     });
 
     // Render initial Home view

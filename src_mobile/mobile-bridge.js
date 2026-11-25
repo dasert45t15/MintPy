@@ -8,51 +8,162 @@
   const PLAYLISTS_KEY = 'mintpy_playlists';
   const QUEUE_KEY = 'mintpy_queue';
 
+  // In-memory store cache + debounced localStorage flush (prevents UI stalls on repeated reads/writes)
+  const memCache = new Map();
+  const dirtyKeys = new Set();
+  let flushTimer = null;
+
+  function flushStorage() {
+    if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+    for (const key of dirtyKeys) {
+      try {
+        localStorage.setItem(key, JSON.stringify(memCache.get(key)));
+      } catch (e) {
+        console.warn('Storage write failed:', e);
+      }
+    }
+    dirtyKeys.clear();
+  }
+
+  window.addEventListener('pagehide', flushStorage);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) flushStorage();
+  });
+
   function getLocalJson(key, def) {
+    if (memCache.has(key)) return memCache.get(key);
     try {
       const v = localStorage.getItem(key);
-      return v ? JSON.parse(v) : def;
+      const parsed = v ? JSON.parse(v) : def;
+      memCache.set(key, parsed);
+      return parsed;
     } catch {
+      memCache.set(key, def);
       return def;
     }
   }
 
   function setLocalJson(key, val) {
-    try {
-      localStorage.setItem(key, JSON.stringify(val));
-    } catch (e) {
-      console.warn('Storage write failed:', e);
+    memCache.set(key, val);
+    dirtyKeys.add(key);
+    if (!flushTimer) {
+      flushTimer = setTimeout(flushStorage, 150);
     }
   }
 
   const mediaCommandListeners = [];
 
-  // MediaSession integration for Android lockscreen and notification player
+  // MediaSession integration for Android lockscreen, AOD, notifications and dynamic islands
   function setupMediaSession() {
-    if (!('mediaSession' in navigator)) return;
+    let lastActiveTrack = null;
+    let lastPlayingState = false;
+    let lastNativeSessionSig = '';
+    let lastNativePosSyncTs = 0;
 
-    window.updateMobileMediaSession = function (track, isPlaying) {
+    window.__mintpyNativeMediaAction = function (action, arg) {
+      if (action === 'play') mediaCommandListeners.forEach(fn => fn('play'));
+      else if (action === 'pause') mediaCommandListeners.forEach(fn => fn('pause'));
+      else if (action === 'next') mediaCommandListeners.forEach(fn => fn('next-track'));
+      else if (action === 'prev') mediaCommandListeners.forEach(fn => fn('prev-track'));
+      else if (action === 'seekto') mediaCommandListeners.forEach(fn => fn('seek-to', Number(arg) / 1000));
+      else if (action === 'stop') mediaCommandListeners.forEach(fn => fn('stop'));
+    };
+
+    window.updateMobileMediaSession = function (track, isPlaying, positionSec) {
       if (!track) return;
+      lastActiveTrack = track;
+      lastPlayingState = !!isPlaying;
+      const dur = Number(track.duration) || 0;
+      const pos = Number(positionSec) || 0;
+      const sig = `${track.id || track.title}|${lastPlayingState ? 1 : 0}|${Math.round(dur)}|${track.artwork || ''}`;
+
+      if (sig !== lastNativeSessionSig && window.AndroidNative && window.AndroidNative.updateNativeMediaSession) {
+        lastNativeSessionSig = sig;
+        lastNativePosSyncTs = Date.now();
+        try {
+          window.AndroidNative.updateNativeMediaSession(
+            track.title || 'MintPy',
+            track.artist || '',
+            track.album || 'MintPy',
+            track.artwork || '',
+            dur,
+            lastPlayingState,
+            pos
+          );
+        } catch (e) {
+          console.warn('AndroidNative MediaSession error:', e);
+        }
+      }
+
+      if (!('mediaSession' in navigator)) return;
       try {
+        const artSrc = track.artwork || '../assets/mintpy-logo.png';
+        const sizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
         navigator.mediaSession.metadata = new MediaMetadata({
           title: track.title || 'MintPy',
           artist: track.artist || 'Zen Music Player',
           album: track.album || 'MintPy',
-          artwork: [
-            { src: track.artwork || '../assets/mintpy-logo.png', sizes: '512x512', type: 'image/png' }
-          ]
+          artwork: sizes.map(size => ({
+            src: artSrc,
+            sizes: size,
+            type: 'image/png'
+          }))
         });
-        navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+        navigator.mediaSession.playbackState = lastPlayingState ? 'playing' : 'paused';
       } catch (e) {
         console.warn('MediaSession error:', e);
       }
     };
 
+    window.updateMobilePositionState = function (state, force) {
+      if (!state) return;
+      const positionSec = Number(state.position) || 0;
+      const durationSec = Number(state.duration) || (lastActiveTrack ? Number(lastActiveTrack.duration) || 0 : 0);
+
+      if (window.AndroidNative && typeof window.AndroidNative.updateNativePlaybackPosition === 'function') {
+        const now = Date.now();
+        if (force === true || now - lastNativePosSyncTs >= 15000) {
+          lastNativePosSyncTs = now;
+          try {
+            window.AndroidNative.updateNativePlaybackPosition(positionSec, durationSec, lastPlayingState);
+          } catch (e) {}
+        }
+      }
+
+      if ('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession) {
+        try {
+          if (durationSec > 0 && positionSec >= 0 && positionSec <= durationSec) {
+            navigator.mediaSession.setPositionState({
+              duration: durationSec,
+              playbackRate: Number(state.playbackRate) || 1.0,
+              position: positionSec
+            });
+          }
+        } catch (e) {}
+      }
+    };
+
+    if (!('mediaSession' in navigator)) return;
+
     const actions = [
-      ['play', () => mediaCommandListeners.forEach(fn => fn('play-pause'))],
-      ['pause', () => mediaCommandListeners.forEach(fn => fn('play-pause'))],
+      ['play', () => mediaCommandListeners.forEach(fn => fn('play'))],
+      ['pause', () => mediaCommandListeners.forEach(fn => fn('pause'))],
       ['previoustrack', () => mediaCommandListeners.forEach(fn => fn('prev-track'))],
       ['nexttrack', () => mediaCommandListeners.forEach(fn => fn('next-track'))],
+      ['seekto', (details) => {
+        if (details && isFinite(details.seekTime)) {
+          mediaCommandListeners.forEach(fn => fn('seek-to', details.seekTime));
+        }
+      }],
+      ['seekforward', (details) => {
+        const offset = (details && isFinite(details.seekOffset)) ? details.seekOffset : 10;
+        mediaCommandListeners.forEach(fn => fn('seek-by', offset));
+      }],
+      ['seekbackward', (details) => {
+        const offset = (details && isFinite(details.seekOffset)) ? -Math.abs(details.seekOffset) : -10;
+        mediaCommandListeners.forEach(fn => fn('seek-by', offset));
+      }],
+      ['stop', () => mediaCommandListeners.forEach(fn => fn('stop'))]
     ];
 
     actions.forEach(([action, handler]) => {
@@ -62,72 +173,189 @@
     });
   }
 
-  async function nativePostJson(url, bodyObj, headersObj) {
-    const jsonStr = typeof bodyObj === 'string' ? bodyObj : JSON.stringify(bodyObj);
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', ...(headersObj || {}) };
+  // Non-blocking native async HTTP bridge (runs on Java ExecutorService thread pool with Keep-Alive + GZIP)
+  const pendingNativeReqs = new Map();
+  let nativeReqSeq = 0;
 
-    // 1. Non-blocking asynchronous fetch (keeps UI completely fluid and responsive)
-    try {
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: jsonStr,
-        signal: AbortSignal.timeout(5000)
-      });
-      if (resp.ok) return await resp.json();
-    } catch (e) {
-      console.warn('Async fetch error, trying bridge fallback:', e.message);
+  window.__mintpyNativeCb = function (reqId, okOrPayload, errMsg) {
+    const entry = pendingNativeReqs.get(reqId);
+    if (!entry) {
+      if (okOrPayload === true && window.AndroidNative && typeof window.AndroidNative.takeAsyncResult === 'function') {
+        try { window.AndroidNative.takeAsyncResult(reqId); } catch {}
+      }
+      return;
+    }
+    pendingNativeReqs.delete(reqId);
+    clearTimeout(entry.timer);
+
+    if (typeof okOrPayload === 'boolean') {
+      if (okOrPayload) {
+        let body = null;
+        try {
+          body = window.AndroidNative && typeof window.AndroidNative.takeAsyncResult === 'function'
+            ? window.AndroidNative.takeAsyncResult(reqId)
+            : null;
+        } catch {}
+        if (body != null) {
+          entry.resolve(body);
+        } else {
+          entry.reject(new Error('Empty native result'));
+        }
+      } else {
+        entry.reject(new Error(errMsg || 'Native HTTP request failed'));
+      }
+      return;
     }
 
-    // 2. Java bridge fallback
-    if (window.AndroidNative) {
-      const headersJson = headersObj ? JSON.stringify(headersObj) : null;
+    const payload = okOrPayload;
+    if (payload && payload.ok && payload.body != null) {
+      entry.resolve(payload.body);
+    } else {
+      entry.reject(new Error((payload && payload.error) || 'Native HTTP request failed'));
+    }
+  };
+
+  function nativeAndroidRequest(method, url, bodyStr, headersObj) {
+    return new Promise((resolve, reject) => {
+      const reqId = 'r_' + (++nativeReqSeq);
+      const timer = setTimeout(() => {
+        pendingNativeReqs.delete(reqId);
+        try {
+          if (window.AndroidNative && typeof window.AndroidNative.takeAsyncResult === 'function') {
+            window.AndroidNative.takeAsyncResult(reqId);
+          }
+        } catch {}
+        reject(new Error('Native HTTP timeout'));
+      }, 15000);
+      pendingNativeReqs.set(reqId, { resolve, reject, timer });
       try {
-        if (headersJson && typeof window.AndroidNative.postJsonWithHeaders === 'function') {
-          const raw = window.AndroidNative.postJsonWithHeaders(url, jsonStr, headersJson);
-          if (raw) return JSON.parse(raw);
-        } else if (typeof window.AndroidNative.postJson === 'function') {
-          const raw = window.AndroidNative.postJson(url, jsonStr);
-          if (raw) return JSON.parse(raw);
-        }
+        const headersJson = headersObj ? JSON.stringify(headersObj) : '';
+        window.AndroidNative.requestAsync(reqId, method, url, bodyStr || '', headersJson);
       } catch (e) {
-        console.warn('AndroidNative bridge error:', e);
+        clearTimeout(timer);
+        pendingNativeReqs.delete(reqId);
+        reject(e);
       }
+    });
+  }
+
+  async function nativeProbeStreamAsync(url, userAgent) {
+    return new Promise((resolve) => {
+      const reqId = 'p_' + (++nativeReqSeq);
+      const timer = setTimeout(() => {
+        pendingNativeReqs.delete(reqId);
+        try {
+          if (window.AndroidNative && typeof window.AndroidNative.takeAsyncResult === 'function') {
+            window.AndroidNative.takeAsyncResult(reqId);
+          }
+        } catch {}
+        resolve(false);
+      }, 9000);
+      pendingNativeReqs.set(reqId, {
+        resolve: (val) => {
+          const code = parseInt(val, 10);
+          resolve(code === 200 || code === 206);
+        },
+        reject: () => resolve(false),
+        timer
+      });
+      try {
+        window.AndroidNative.probeStreamAsync(reqId, url, userAgent || '');
+      } catch (e) {
+        clearTimeout(timer);
+        pendingNativeReqs.delete(reqId);
+        resolve(false);
+      }
+    });
+  }
+
+  async function nativePostJson(url, bodyObj, headersObj) {
+    const jsonStr = typeof bodyObj === 'string' ? bodyObj : JSON.stringify(bodyObj);
+
+    // 1. Non-blocking async native bridge (keeps WebView UI thread 100% responsive)
+    if (window.AndroidNative && typeof window.AndroidNative.requestAsync === 'function') {
+      const raw = await nativeAndroidRequest('POST', url, jsonStr, headersObj);
+      if (!raw) throw new Error('Empty response from native HTTP');
+      return JSON.parse(raw);
+    }
+
+    // 2. Legacy synchronous native bridge fallback (only if requestAsync is absent)
+    if (window.AndroidNative && typeof window.AndroidNative.postJsonWithHeaders === 'function') {
+      try {
+        const raw = window.AndroidNative.postJsonWithHeaders(url, jsonStr, headersObj ? JSON.stringify(headersObj) : null);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        console.warn('Native postJsonWithHeaders error:', e);
+      }
+    }
+
+    if (window.AndroidNative && typeof window.AndroidNative.postJson === 'function') {
+      try {
+        const raw = window.AndroidNative.postJson(url, jsonStr);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+    }
+
+    // 3. Web fetch (for browser preview)
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', ...(headersObj || {}) };
+    try {
+      const opts = { method: 'POST', headers, body: jsonStr };
+      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(6000);
+      const resp = await fetch(url, opts);
+      if (resp.ok) return await resp.json();
+    } catch (e) {
+      console.warn('Async fetch error:', e.message);
     }
 
     throw new Error('Network request failed');
   }
 
   async function nativeGetUrl(url, headersObj) {
-    // 1. Non-blocking asynchronous fetch
-    try {
-      const resp = await fetch(url, {
-        headers: headersObj || {},
-        signal: AbortSignal.timeout(5000)
-      });
-      if (resp.ok) return await resp.text();
-    } catch (e) {
-      console.warn('Async fetch get error, trying bridge fallback:', e.message);
-    }
-
-    // 2. Java bridge fallback
-    if (window.AndroidNative) {
-      const headersJson = headersObj ? JSON.stringify(headersObj) : null;
+    // 1. Non-blocking async native bridge (keeps WebView UI thread 100% responsive)
+    if (window.AndroidNative && typeof window.AndroidNative.requestAsync === 'function') {
       try {
-        if (headersJson && typeof window.AndroidNative.getUrlWithHeaders === 'function') {
-          const raw = window.AndroidNative.getUrlWithHeaders(url, headersJson);
-          if (raw) return raw;
-        } else if (typeof window.AndroidNative.getUrl === 'function') {
-          const raw = window.AndroidNative.getUrl(url);
-          if (raw) return raw;
-        }
+        const raw = await nativeAndroidRequest('GET', url, '', headersObj);
+        return raw || '';
       } catch (e) {
-        console.warn('AndroidNative getUrl error:', e);
+        console.warn('Native async GET error:', e.message);
+        return '';
       }
     }
 
-    throw new Error('Network get failed');
+    // 2. Legacy synchronous native bridge fallback (only if requestAsync is absent)
+    if (window.AndroidNative && typeof window.AndroidNative.getUrlWithHeaders === 'function') {
+      try {
+        const raw = window.AndroidNative.getUrlWithHeaders(url, headersObj ? JSON.stringify(headersObj) : null);
+        if (raw) return raw;
+      } catch (e) {
+        console.warn('Native getUrlWithHeaders error:', e);
+      }
+    }
+
+    if (window.AndroidNative && typeof window.AndroidNative.getUrl === 'function') {
+      try {
+        const raw = window.AndroidNative.getUrl(url);
+        if (raw) return raw;
+      } catch (e) {}
+    }
+
+    // 3. Web fetch
+    try {
+      const opts = { headers: headersObj || {} };
+      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(6000);
+      const resp = await fetch(url, opts);
+      if (resp.ok) return await resp.text();
+    } catch (e) {
+      console.warn('Async fetch get error:', e.message);
+    }
+
+    return '';
   }
+
+  // Stream URL TTL cache (25 min) + in-flight deduplication
+  const streamUrlCache = new Map();
+  const streamInFlight = new Map();
+  const STREAM_CACHE_TTL_MS = 25 * 60 * 1000;
 
   // Local files cache for mobile
   const localBlobTracks = new Map();
@@ -214,118 +442,238 @@
 
     getTrackAudioUrl: async (track) => {
       if (!track) return '';
-      if (track.directUrl) return track.directUrl;
       if (track.source === 'local') {
+        if (track.directUrl) return track.directUrl;
         const cached = localBlobTracks.get(track.filepath || track.id);
         if (cached) return cached;
       }
-      let videoId = String(track.id || '').replace(/^yt:/, '');
-      if (!videoId) return '';
 
-      // If it's a search query placeholder
-      if (videoId.startsWith('search_') || videoId.startsWith('ytsearch:')) {
-        const cleanQ = videoId.replace(/^search_/, '').replace(/^ytsearch:/, '');
-        const found = await window.api.searchTracks(decodeURIComponent(cleanQ));
-        if (found && found.length && found[0].id) {
-          videoId = String(found[0].id).replace(/^yt:/, '');
-          track.id = `yt:${videoId}`;
-        }
+      const cacheKey = String(track.id || '');
+      const cachedStream = streamUrlCache.get(cacheKey);
+      if (cachedStream && Date.now() - cachedStream.ts < STREAM_CACHE_TTL_MS) {
+        return cachedStream.url;
+      }
+      if (streamInFlight.has(cacheKey)) {
+        return streamInFlight.get(cacheKey);
       }
 
-      // 1. YouTube Innertube with ANDROID_VR client (Fastest, zero cookies needed, works 100%)
-      try {
-        const payload = {
-          context: {
-            client: {
-              clientName: 'ANDROID_VR',
-              clientVersion: '1.60.19',
-              deviceMake: 'Oculus',
-              deviceModel: 'Quest 3',
-              osName: 'Android',
-              hl: 'en',
-              gl: 'US'
-            }
-          },
-          videoId: videoId
-        };
-        const json = await nativePostJson('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', payload);
-        const formats = json?.streamingData?.adaptiveFormats || [];
-        const audioFormats = formats
-          .filter(f => (f.mimeType || '').startsWith('audio/') && f.url)
-          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+      const promise = (async () => {
+        let videoId = cacheKey.replace(/^yt:/, '');
+        if (!videoId) return '';
 
-        if (audioFormats.length > 0) {
-          const aac = audioFormats.find(f => (f.mimeType || '').includes('audio/mp4')) || audioFormats[0];
-          track.directUrl = aac.url;
-          return aac.url;
-        }
-      } catch (err) {
-        console.warn('Innertube ANDROID_VR resolve error:', err);
-      }
-
-      // 2. YouTube Innertube with VISIONOS client
-      try {
-        const headers = {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
-          'X-Youtube-Client-Name': '101',
-          'X-Youtube-Client-Version': '1.02',
-          'Origin': 'https://www.youtube.com'
-        };
-        const payload = {
-          context: {
-            client: {
-              clientName: 'VISIONOS',
-              clientVersion: '1.02',
-              deviceMake: 'Apple',
-              deviceModel: 'RealityDevice17,1',
-              userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
-              osName: 'visionOS',
-              osVersion: '26.5.23O471',
-              hl: 'en',
-              gl: 'US'
-            }
-          },
-          videoId: videoId
-        };
-        const json = await nativePostJson('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', payload, headers);
-        const formats = json?.streamingData?.adaptiveFormats || [];
-        const audioFormats = formats
-          .filter(f => (f.mimeType || '').startsWith('audio/') && f.url)
-          .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
-
-        if (audioFormats.length > 0) {
-          const aac = audioFormats.find(f => (f.mimeType || '').includes('audio/mp4')) || audioFormats[0];
-          track.directUrl = aac.url;
-          return aac.url;
-        }
-      } catch (err) {
-        console.warn('Innertube VISIONOS resolve error:', err);
-      }
-
-      // 3. Fallback to Invidious instances
-      const invidiousHosts = [
-        'https://inv.tux.pizza',
-        'https://invidious.nerdvpn.de',
-        'https://iv.melmac.space',
-        'https://yt.artemislena.eu'
-      ];
-      for (const host of invidiousHosts) {
-        try {
-          const raw = await nativeGetUrl(`${host}/api/v1/videos/${encodeURIComponent(videoId)}`);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            const aFormats = (parsed.adaptiveFormats || []).filter(f => (f.type || '').startsWith('audio/') && f.url);
-            if (aFormats.length > 0) {
-              const u = aFormats[0].url.startsWith('http') ? aFormats[0].url : `${host}${aFormats[0].url}`;
-              track.directUrl = u;
-              return u;
+        // If it's a search query placeholder
+        if (videoId.startsWith('search_') || videoId.startsWith('ytsearch:')) {
+          const cleanQ = videoId.replace(/^search_/, '').replace(/^ytsearch:/, '');
+          const found = await window.api.searchTracks(decodeURIComponent(cleanQ));
+          if (found && found.length && found[0].id) {
+            videoId = String(found[0].id).replace(/^yt:/, '');
+            track.id = `yt:${videoId}`;
+          }
+        } else if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+          const query = `${track.artist || ''} - ${track.title || ''}`.trim() || videoId;
+          const searchFn = (window.api && window.api.searchTracks) ? window.api.searchTracks : this.searchTracks?.bind(this);
+          if (searchFn) {
+            const found = await searchFn(query);
+            if (found && found.length && found[0].id) {
+              videoId = String(found[0].id).replace(/^yt:/, '');
+              track.id = `yt:${videoId}`;
             }
           }
-        } catch (e) {}
-      }
+        }
 
-      return '';
+        async function probePlayableUrl(url, userAgent) {
+          if (!url) return false;
+          if (window.AndroidNative && typeof window.AndroidNative.probeStreamAsync === 'function') {
+            return await nativeProbeStreamAsync(url, userAgent);
+          }
+          if (window.AndroidNative && typeof window.AndroidNative.probeStreamUrl === 'function') {
+            try {
+              const code = window.AndroidNative.probeStreamUrl(url, userAgent || '');
+              return code === 200 || code === 206;
+            } catch (e) {
+              return false;
+            }
+          }
+          return true;
+        }
+
+        function wrapPlayableUrl(url, userAgent, mimeType) {
+          if (!url) return '';
+          if (window.AndroidNative && typeof window.AndroidNative.registerProxyStream === 'function') {
+            try {
+              const proxied = window.AndroidNative.registerProxyStream(url, userAgent || '', mimeType || 'video/mp4');
+              if (proxied) return proxied;
+            } catch (e) {}
+          }
+          return url;
+        }
+
+        async function extractVerifiedStream(json, userAgent) {
+          const sd = json && json.streamingData;
+          if (!sd) return '';
+
+          const adaptive = (sd.adaptiveFormats || [])
+            .filter(f => f && f.url && ((f.mimeType || '').startsWith('audio/') || (f.mimeType || '').includes('audio/mp4') || (f.mimeType || '').includes('audio/webm')))
+            .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+          const bestAdaptive = adaptive.find(f => (f.mimeType || '').includes('audio/mp4')) || adaptive[0] || null;
+
+          const progFormats = (sd.formats || []).filter(f => f && f.url && (f.mimeType || '').includes('video/mp4'));
+          const itag18 = progFormats.find(f => f.itag === 18);
+          const progressiveCandidates = itag18 ? [itag18, ...progFormats.filter(f => f !== itag18)] : progFormats;
+
+          const hasNativeProbe = !!(window.AndroidNative && (
+            typeof window.AndroidNative.probeStreamAsync === 'function' ||
+            typeof window.AndroidNative.probeStreamUrl === 'function'
+          ));
+
+          if (hasNativeProbe) {
+            if (bestAdaptive && await probePlayableUrl(bestAdaptive.url, userAgent)) {
+              return wrapPlayableUrl(bestAdaptive.url, userAgent, bestAdaptive.mimeType || 'audio/mp4');
+            }
+            for (const f of progressiveCandidates) {
+              if (await probePlayableUrl(f.url, userAgent)) {
+                return wrapPlayableUrl(f.url, userAgent, f.mimeType || 'video/mp4');
+              }
+            }
+            return '';
+          }
+
+          if (progressiveCandidates.length > 0) {
+            return wrapPlayableUrl(progressiveCandidates[0].url, userAgent, progressiveCandidates[0].mimeType || 'video/mp4');
+          }
+          if (bestAdaptive) {
+            return wrapPlayableUrl(bestAdaptive.url, userAgent, bestAdaptive.mimeType || 'audio/mp4');
+          }
+          return '';
+        }
+
+        const playerClients = [
+          {
+            name: 'ANDROID 20.10.38',
+            endpoint: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip',
+              'X-Youtube-Client-Name': '3',
+              'X-Youtube-Client-Version': '20.10.38'
+            },
+            client: {
+              clientName: 'ANDROID',
+              clientVersion: '20.10.38',
+              androidSdkVersion: 34,
+              osName: 'Android',
+              osVersion: '14',
+              hl: 'en',
+              gl: 'US'
+            }
+          },
+          {
+            name: 'ANDROID 21.03.36',
+            endpoint: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'com.google.android.youtube/21.03.36 (Linux; U; Android 15) gzip',
+              'X-Youtube-Client-Name': '3',
+              'X-Youtube-Client-Version': '21.03.36'
+            },
+            client: {
+              clientName: 'ANDROID',
+              clientVersion: '21.03.36',
+              androidSdkVersion: 35,
+              osName: 'Android',
+              osVersion: '15',
+              hl: 'en',
+              gl: 'US'
+            }
+          },
+          {
+            name: 'IOS 20.10.4',
+            endpoint: 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+              'X-Youtube-Client-Name': '5',
+              'X-Youtube-Client-Version': '20.10.4'
+            },
+            client: {
+              clientName: 'IOS',
+              clientVersion: '20.10.4',
+              deviceMake: 'Apple',
+              deviceModel: 'iPhone16,2',
+              osName: 'iPhone',
+              osVersion: '18.3.2.22D82',
+              hl: 'en',
+              gl: 'US'
+            }
+          },
+          {
+            name: 'WEB_REMIX',
+            endpoint: 'https://music.youtube.com/youtubei/v1/player?prettyPrint=false',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'Origin': 'https://music.youtube.com',
+              'Referer': 'https://music.youtube.com/',
+              'X-Youtube-Client-Name': '67',
+              'X-Youtube-Client-Version': '1.20240101.01.00'
+            },
+            client: {
+              clientName: 'WEB_REMIX',
+              clientVersion: '1.20240101.01.00',
+              hl: 'en',
+              gl: 'US'
+            }
+          }
+        ];
+
+        for (const cfg of playerClients) {
+          try {
+            const payload = {
+              context: { client: cfg.client },
+              videoId: videoId,
+              contentCheckOk: true,
+              racyCheckOk: true
+            };
+            const json = await nativePostJson(cfg.endpoint, payload, cfg.headers);
+            const verifiedUrl = await extractVerifiedStream(json, cfg.headers['User-Agent']);
+            if (verifiedUrl) {
+              streamUrlCache.set(cacheKey, { url: verifiedUrl, ts: Date.now() });
+              streamUrlCache.set(`yt:${videoId}`, { url: verifiedUrl, ts: Date.now() });
+              return verifiedUrl;
+            }
+          } catch (err) {
+            console.warn(`Innertube ${cfg.name} resolve error:`, err.message || err);
+          }
+        }
+
+        return '';
+      })();
+
+      streamInFlight.set(cacheKey, promise);
+      try {
+        return await promise;
+      } finally {
+        streamInFlight.delete(cacheKey);
+      }
+    },
+
+    prefetchTrack: (track) => {
+      if (!track || track.source === 'local') return;
+      window.api.getTrackAudioUrl(track).catch(() => {});
+    },
+
+    invalidateTrackStream: (trackId) => {
+      if (!trackId) return;
+      const clean = String(trackId).replace(/^yt:/, '');
+      streamUrlCache.delete(trackId);
+      streamUrlCache.delete(clean);
+      streamUrlCache.delete(`yt:${clean}`);
+    },
+
+    isFavoriteSync: (trackId) => {
+      if (!trackId) return false;
+      const favs = getLocalJson(FAVORITES_KEY, []);
+      return favs.some(f => f.id === trackId);
     },
 
     pickFolder: async () => {
@@ -744,7 +1092,7 @@
       style: 'zen',
       volumeNormalize: false,
       eqBands: { low: 0, mid: 0, high: 0 },
-      crossfadeSeconds: 0,
+      crossfadeSeconds: 5,
       auraIntensity: 0.35
     }),
     saveSettings: async (settings) => {

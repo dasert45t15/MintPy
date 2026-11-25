@@ -12,4 +12,13 @@ PROJECT_DOSSIER.md
 GEMINI.md
 ROADMAP.md
 scripts/generate_project_doc.py
+*.apk
+*.exe
+*.dll
+*.idsig
+*.zip
+*.res
+*.o
+*.obj
+native/build/
 
