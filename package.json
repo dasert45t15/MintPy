@@ -1,78 +1,16 @@
 {
   "name": "mintpy",
-  "version": "5.4.6",
-  "description": "Japanese-inspired desktop music player with local playback and YouTube streaming",
-  "author": "MintPy",
+  "version": "6.0.0",
+  "description": "Atmospheric Zen audio player for Windows (Native C++20/WebView2) and Android",
+  "author": "Dasert (Ivan)",
   "license": "MIT",
-  "main": "app.js",
   "scripts": {
-    "start": "electron .",
-    "postinstall": "node scripts/fetch-ytdlp.js",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder --publish never",
-    "build:apk": "python scripts/build-android-apk.py",
+    "check": "node scripts/check-syntax.js",
+    "test": "node --test",
     "build:native": "powershell -ExecutionPolicy Bypass -File scripts/build-cpp.ps1",
     "build:installer": "powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1",
-    "start:native": "powershell -ExecutionPolicy Bypass -Command \"Start-Process .\\releases\\MintPy-Native.exe\"",
-    "check": "node scripts/check-syntax.js",
-    "test": "node --test"
-  },
-  "build": {
-    "appId": "com.mintpy.app",
-    "productName": "MintPy",
-    "directories": {
-      "output": "releases"
-    },
-    "files": [
-      "app.js",
-      "preload.js",
-      "src/**/*",
-      "assets/**/*",
-      "!assets/*-chroma.png",
-      "node_modules/**/*",
-      "icon.png"
-    ],
-    "extraResources": [
-      {
-        "from": "bin",
-        "to": "bin",
-        "filter": [
-          "*.exe"
-        ]
-      }
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "assets/mintpy-logo.png"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false,
-      "runAfterFinish": true,
-      "createDesktopShortcut": "always",
-      "createStartMenuShortcut": true,
-      "shortcutName": "MintPy"
-    }
-  },
-  "devDependencies": {
-    "electron": "43.1.1",
-    "electron-builder": "^26.15.3"
-  },
-  "dependencies": {
-    "discord-rpc": "^4.0.1",
-    "music-metadata": "11.14.0"
+    "build:apk": "python scripts/build-android-apk.py",
+    "build:all": "powershell -ExecutionPolicy Bypass -File scripts/build-all.ps1",
+    "start": "powershell -ExecutionPolicy Bypass -Command \"Start-Process .\\releases\\MintPy-Native.exe\""
   }
 }

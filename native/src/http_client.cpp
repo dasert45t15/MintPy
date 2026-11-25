@@ -172,24 +172,35 @@ double score_candidate(const nlohmann::json& c, const std::string& artist, const
 }
 
 std::string pick_best_audio_format(const nlohmann::json& player_json) {
-  if (!player_json.contains("streamingData")) return {};
+  if (!player_json.contains("streamingData") || !player_json["streamingData"].is_object()) return {};
   const auto& sd = player_json["streamingData"];
-  if (!sd.contains("adaptiveFormats") || !sd["adaptiveFormats"].is_array()) return {};
 
   std::string best_mp4, best_any;
   int best_mp4_br = -1, best_any_br = -1;
-  for (const auto& f : sd["adaptiveFormats"]) {
-    std::string mime = f.value("mimeType", "");
-    std::string url = f.value("url", "");
-    if (url.empty() || mime.rfind("audio/", 0) != 0) continue;
-    int br = f.value("bitrate", 0);
-    if (mime.find("audio/mp4") != std::string::npos) {
-      if (br > best_mp4_br) { best_mp4_br = br; best_mp4 = url; }
-    } else {
-      if (br > best_any_br) { best_any_br = br; best_any = url; }
+  if (sd.contains("adaptiveFormats") && sd["adaptiveFormats"].is_array()) {
+    for (const auto& f : sd["adaptiveFormats"]) {
+      std::string mime = f.value("mimeType", "");
+      std::string url = f.value("url", "");
+      if (url.empty() || mime.rfind("audio/", 0) != 0) continue;
+      int br = f.value("bitrate", 0);
+      if (mime.find("audio/mp4") != std::string::npos) {
+        if (br > best_mp4_br) { best_mp4_br = br; best_mp4 = url; }
+      } else {
+        if (br > best_any_br) { best_any_br = br; best_any = url; }
+      }
     }
   }
-  return !best_mp4.empty() ? best_mp4 : best_any;
+  if (!best_mp4.empty()) return best_mp4;
+  if (!best_any.empty()) return best_any;
+
+  // Fallback to progressive MP4 stream (e.g. itag 18) if adaptive audio is unavailable
+  if (sd.contains("formats") && sd["formats"].is_array()) {
+    for (const auto& f : sd["formats"]) {
+      std::string url = f.value("url", "");
+      if (!url.empty()) return url;
+    }
+  }
+  return {};
 }
 
 }  // namespace
@@ -553,7 +564,40 @@ ResolvedStream HttpClient::resolve_youtube_stream(const std::string& video_id_or
     }
   }
 
-  // 2. Fallback only when yt-dlp binary is absent or unavailable: Innertube IOS then ANDROID
+  // 2. Built-in zero-dependency Innertube resolver (ANDROID_VR -> IOS -> ANDROID -> Piped)
+  try {
+    nlohmann::json payload = {
+        {"context", {{"client", {
+            {"clientName", "ANDROID_VR"},
+            {"clientVersion", "1.60.19"},
+            {"deviceMake", "Oculus"},
+            {"deviceModel", "Quest 3"},
+            {"androidSdkVersion", 32},
+            {"osName", "Android"},
+            {"osVersion", "12L"},
+            {"hl", "en"},
+            {"gl", "US"}
+        }}}},
+        {"videoId", real_id},
+        {"contentCheckOk", true},
+        {"racyCheckOk", true}
+    };
+    std::string vr_ua = "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip";
+    auto r = request("POST", "https://www.youtube.com/youtubei/v1/player?prettyPrint=false", payload.dump(),
+                     {
+                         {"Content-Type", "application/json"},
+                         {"Accept", "application/json"},
+                         {"User-Agent", vr_ua},
+                         {"X-Youtube-Client-Name", "28"},
+                         {"X-Youtube-Client-Version", "1.60.19"}
+                     }, 7000);
+    if (r.ok()) {
+      auto j = nlohmann::json::parse(r.body);
+      std::string url = pick_best_audio_format(j);
+      if (!url.empty()) return cache_store({url, vr_ua});
+    }
+  } catch (...) {}
+
   try {
     nlohmann::json payload = {
         {"context", {{"client", {

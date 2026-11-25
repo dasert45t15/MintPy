@@ -1,5 +1,5 @@
-// MintPy Mobile Controller - v5.4.6
-// Standalone mobile player logic decoupled from PC Electron.
+// MintPy Mobile Controller - v6.0.0
+// Standalone mobile player logic with modular themes, IndexedDB bridge, and touch FX.
 
 (function () {
   'use strict';
@@ -17,6 +17,7 @@
   let lastPlayIconState = null;
 
   const bridge = window.api;
+  const MobileThemes = window.MintPyMobileThemes || {};
 
   // Dual-Deck Audio Engine (Native HTML5 Audio for gapless preload & crossfade)
   const deckA = new Audio();
@@ -48,27 +49,11 @@
     playbackSpeed: 1.0
   };
 
-  const THEME_LIST = [
-    { id: 'zen', name: 'Zen', emoji: '🎋' },
-    { id: 'lofi', name: 'Lo-Fi', emoji: '☕' },
-    { id: 'synthwave', name: 'Synthwave', emoji: '🌆' },
-    { id: 'ocean', name: 'Ocean', emoji: '🌊' },
-    { id: 'forest', name: 'Forest', emoji: '🌲' },
-    { id: 'aurora', name: 'Aurora', emoji: '✨' },
-    { id: 'sakura', name: 'Sakura Night', emoji: '🌸' },
-    { id: 'midnight', name: 'Midnight Gold', emoji: '🌙' },
-    { id: 'cyber', name: 'Cyberpunk', emoji: '⚡' }
+  const THEME_LIST = MobileThemes.THEME_LIST || [
+    { id: 'zen', name: 'Zen', emoji: '🎋' }
   ];
-
-  const EQ_PRESETS = [
-    { id: 'flat', label: 'Ровный', bands: { low: 0, mid: 0, high: 0 } },
-    { id: 'bass', label: 'Бас+', bands: { low: 8, mid: 0, high: 2 } },
-    { id: 'vocal', label: 'Вокал', bands: { low: -2, mid: 6, high: 4 } },
-    { id: 'rock', label: 'Рок', bands: { low: 6, mid: 2, high: 6 } },
-    { id: 'night', label: 'Ночь', bands: { low: 4, mid: -2, high: -3 } }
-  ];
-
-  const SPEED_OPTIONS = [0.85, 1.0, 1.15, 1.25, 1.5];
+  const EQ_PRESETS = MobileThemes.EQ_PRESETS || [];
+  const SPEED_OPTIONS = MobileThemes.SPEED_OPTIONS || [0.85, 1.0, 1.15, 1.25, 1.5];
 
   function updateDynamicArtBg() {
     const el = $('#dynamicArtBg');
@@ -532,6 +517,7 @@
         nativePaused = true;
         isPlaying = false;
         updateGlobalUI();
+        if (window.mintpySleepTimer?.onTrackEnded?.()) return;
         if (isRepeat) {
           playTrack(currentTrack, currentIndex);
         } else {
@@ -582,6 +568,7 @@
 
       deck.onended = () => {
         if (deck === audio && !isCrossfading) {
+          if (window.mintpySleepTimer?.onTrackEnded?.()) return;
           if (isRepeat) {
             playTrack(currentTrack, currentIndex);
           } else {
@@ -934,6 +921,7 @@
 
   // --- VIEW ROUTING ---
   function navigate(viewName) {
+    window.mintpyMobileFX?.setTabDirection?.(viewName);
     currentView = viewName;
     $$('.nav-tab').forEach(t => {
       const isTab = t.dataset.view === viewName || (viewName === 'history' && t.dataset.view === 'favorites');
@@ -1845,7 +1833,7 @@
         <div class="settings-group">
           <div class="group-title">ℹ️ О MintPy Mobile</div>
           <div class="setting-desc" style="line-height:1.6;">
-            <strong>MintPy Mobile v5.4.6</strong><br>
+            <strong>MintPy Mobile v${window.MINTPY_VERSION || '6.0.0'}</strong><br>
             Автор: <strong>Иван Dasert</strong><br>
             Портативный дзэн-плеер с фоновыми атмосферами.
           </div>
@@ -1991,11 +1979,13 @@
   }
 
   function applyStyle(styleName) {
+    const changed = settings.style !== styleName;
     settings.style = styleName;
     document.documentElement.setAttribute('data-style', styleName);
     document.body.setAttribute('data-style', styleName);
     const appEl = $('.mobile-app');
     if (appEl) appEl.setAttribute('data-style', styleName);
+    if (changed) window.mintpyMobileFX?.flashThemeVeil?.();
     const found = THEME_LIST.find(t => t.id === styleName);
     const tag = $('#headerStyleTag');
     if (tag) tag.textContent = found ? `${found.name} ${found.emoji}` : styleName;
@@ -2013,6 +2003,7 @@
 
   function toggleTheme() {
     const newMode = settings.appearance === 'dark' ? 'light' : 'dark';
+    window.mintpyMobileFX?.flashThemeVeil?.();
     applyAppearance(newMode);
     updateThemeButtonUI();
   }
@@ -2032,6 +2023,9 @@
 
   // --- INITIALIZATION ---
   async function init() {
+    if (bridge && bridge.ready) {
+      try { await bridge.ready; } catch {}
+    }
     setupAudio();
 
     // Load saved settings
@@ -2096,10 +2090,49 @@
     const sleepBtn = $('#headerSleepBtn');
     if (sleepBtn) sleepBtn.onclick = () => window.mintpySleepTimer && window.mintpySleepTimer.toggle();
 
-    // Global references for helper modules (sleep-timer, lyrics, ambient)
+    // Universal player adapter for shared modules (Synced Lyrics, Sleep Timer, Touch Swipe FX)
     window.audio = audio;
     window.togglePlay = togglePlay;
     window.isPlaying = isPlaying;
+    window.mintpyPlayer = {
+      getCurrentTrack: () => currentTrack,
+      getCurrentTime: () => usingNativeAudio ? nativeCurrentTime : (audio.currentTime || 0),
+      seekToSeconds: (sec) => {
+        if (!Number.isFinite(sec) || sec < 0) return;
+        cancelCrossfade();
+        if (usingNativeAudio) {
+          const dur = nativeDuration || (currentTrack && Number(currentTrack.duration)) || 0;
+          nativeCurrentTime = dur > 0 ? Math.min(dur, sec) : sec;
+          if (window.AndroidNative && typeof window.AndroidNative.nativeSeekTo === 'function') {
+            window.AndroidNative.nativeSeekTo(nativeCurrentTime);
+          }
+          updateTimelineUI(true);
+        } else if (audio.duration && isFinite(audio.duration)) {
+          audio.currentTime = Math.min(audio.duration, sec);
+          updateTimelineUI(true);
+        }
+      },
+      setSleepFade: (factor) => {
+        const f = Math.max(0, Math.min(1, factor));
+        if (usingNativeAudio && window.AndroidNative && typeof window.AndroidNative.nativeSetVolume === 'function') {
+          window.AndroidNative.nativeSetVolume(f);
+        } else {
+          audio.volume = f;
+        }
+      },
+      pause: () => {
+        if (usingNativeAudio) {
+          if (!nativePaused && window.AndroidNative && window.AndroidNative.nativePause) {
+            window.AndroidNative.nativePause();
+          }
+        } else if (!audio.paused) {
+          audio.pause();
+        }
+      },
+      isPlaying: () => Boolean(isPlaying),
+      next: () => nextTrack(),
+      prev: () => prevTrack()
+    };
 
     // MediaSession Bridge Commands
     bridge.onMediaCommand((cmd, arg) => {

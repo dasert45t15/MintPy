@@ -2,7 +2,9 @@
 !include "FileFunc.nsh"
 
 !define PRODUCT_NAME "MintPy"
-!define PRODUCT_VERSION "5.4.6"
+!ifndef PRODUCT_VERSION
+  !define PRODUCT_VERSION "6.0.0"
+!endif
 !define PRODUCT_PUBLISHER "Dasert"
 !define PRODUCT_WEB_SITE "https://github.com/dasert45t15/MintPy"
 !define PRODUCT_DIR_REGKEY "Software\Microsoft\Windows\CurrentVersion\App Paths\MintPy-Native.exe"
@@ -45,24 +47,24 @@ Section "MainSection" SEC01
   ; Close running MintPy instance before installing
   nsExec::Exec 'taskkill /F /IM MintPy-Native.exe /T'
 
-  ; Core Binaries
+  ; Core Binaries & Metadata
   File "..\releases\MintPy-Native.exe"
   File "..\releases\WebView2Loader.dll"
   File "..\package.json"
   File "..\LICENSE"
   File "..\README.md"
 
-  ; Assets
-  SetOutPath "$INSTDIR\assets"
-  File /r "..\assets\*.*"
+  ; Shared JS Modules
+  SetOutPath "$INSTDIR\shared"
+  File /r "..\shared\*.*"
 
-  ; Web Source files (HTML, CSS, JS, etc.)
+  ; Desktop Assets (exclude mobile-only portrait wallpapers to keep desktop install compact)
+  SetOutPath "$INSTDIR\assets"
+  File /r /x "mobile" "..\assets\*.*"
+
+  ; Desktop Web UI (HTML, modular CSS, JS)
   SetOutPath "$INSTDIR\src"
   File /r "..\src\*.*"
-
-  ; Mobile web source
-  SetOutPath "$INSTDIR\src_mobile"
-  File /r "..\src_mobile\*.*"
 
   ; Shortcuts
   SetOutPath "$INSTDIR"
@@ -95,6 +97,7 @@ Section Uninstall
   Delete "$SMPROGRAMS\MintPy\Удалить MintPy.lnk"
   RMDir "$SMPROGRAMS\MintPy"
 
+  RMDir /r "$INSTDIR\shared"
   RMDir /r "$INSTDIR\assets"
   RMDir /r "$INSTDIR\src"
   RMDir /r "$INSTDIR\src_mobile"

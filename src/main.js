@@ -169,7 +169,13 @@ function setupAudio() {
   for (const deck of [deckA, deckB]) {
     deck.crossOrigin = 'anonymous';
     deck.volume = isMuted ? 0 : volPercent / 100;
-    deck.ontimeupdate = () => { if (deck !== audio) return; updateTimelineUI(); checkAndPreloadNextTrack(); maybeCrossfade(); };
+    deck.ontimeupdate = () => {
+      if (deck !== audio) return;
+      updateTimelineUI();
+      checkAndPreloadNextTrack();
+      maybeCrossfade();
+      window.mintpyLyrics?.onTimeUpdate?.(audio.currentTime || 0);
+    };
     deck.onloadedmetadata = () => { if (deck === audio) updateTimelineUI(); };
     deck.ondurationchange = () => { if (deck === audio) updateTimelineUI(); };
     deck.onplay = () => {
@@ -179,6 +185,7 @@ function setupAudio() {
     deck.onpause = () => { if (deck === audio) { isPlaying = false; updateUI(); } };
     deck.onended = () => {
       if (deck !== audio) return;
+      if (window.mintpySleepTimer?.onTrackEnded?.()) return;
       if (crossfadePromise) { const pending = crossfadePromise; pending.finally(() => { if (deck === audio && deck.ended) { if (isRepeat) playCurrent(); else nextTrack(); } }); return; }
       if (isRepeat) playCurrent(); else nextTrack();
     };
@@ -710,8 +717,12 @@ function bindUI() {
 function setActive(btn) { $$('.nav-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
 
 function renderView(view) {
+  window.mintpyFX?.setViewDirection?.(view);
   currentView = view;
-  const finish = () => triggerAnim(contentInner, 'view-enter', 420);
+  const finish = () => {
+    triggerAnim(contentInner, 'view-enter', 420);
+    window.mintpyFX?.ensureVinylHalo?.();
+  };
   let res;
   if (view === 'home') res = renderHome();
   else if (view === 'search') res = renderSearch();
@@ -728,14 +739,7 @@ function renderView(view) {
 // ========== SETTINGS ==========
 
 // ==================== MINTPY ZEN SETUP WIZARD ====================
-const styleAccents = {
-  zen: { accent: '#4ade80', glow: 'rgba(74, 222, 128, 0.25)', icon: '🎋', label: 'Zen (Сад камней)' },
-  lofi: { accent: '#f59e0b', glow: 'rgba(245, 158, 11, 0.25)', icon: '☕', label: 'Lo-Fi (Уютный кофе)' },
-  synthwave: { accent: '#ec4899', glow: 'rgba(236, 72, 153, 0.25)', icon: '🌆', label: 'Synthwave (Ретро-закат)' },
-  ocean: { accent: '#38bdf8', glow: 'rgba(56, 189, 248, 0.25)', icon: '🌊', label: 'Ocean (Морские глубины)' },
-  forest: { accent: '#22c55e', glow: 'rgba(34, 197, 94, 0.25)', icon: '🌲', label: 'Forest (Ночной лес)' },
-  aurora: { accent: '#a855f7', glow: 'rgba(168, 85, 247, 0.25)', icon: '✨', label: 'Aurora (Северное сияние)' }
-};
+const styleAccents = window.MintPyThemes?.STYLE_ACCENTS || {};
 
 function initSetupWizard(initialSettings = {}) {
   const overlay = $('#mintpy-setup-overlay');
@@ -944,20 +948,20 @@ function applySettings(s) {
   const effectiveTheme = appearance === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : appearance;
+  const prevStyle = root.dataset.style;
+  const prevTheme = root.dataset.theme;
   root.dataset.theme = effectiveTheme;
   root.style.colorScheme = effectiveTheme;
   if (document.body) document.body.style.colorScheme = effectiveTheme;
   root.dataset.style = s.style || 'zen';
+  if ((prevStyle && prevStyle !== root.dataset.style) || (prevTheme && prevTheme !== effectiveTheme)) {
+    window.mintpyFX?.flashThemeVeil?.();
+  }
   
   // Accent color is user-selectable only in the zen style; other styles ship their own palette
   if ((s.style || 'zen') === 'zen') {
-    const accents = {
-      'blue-purple': { accent: '#a5202d', secondary: '#486b45' },
-      'green-teal':  { accent: '#3f6845', secondary: '#7f4c3c' },
-      'orange-red':  { accent: '#b45b2a', secondary: '#556f48' },
-      'pink-rose':   { accent: '#b14a62', secondary: '#63764f' },
-      'cyan-lime':   { accent: '#376b72', secondary: '#657445' },
-      'white-cold':  { accent: '#4f5663', secondary: '#6b6258' },
+    const accents = window.MintPyThemes?.ZEN_PRESET_ACCENTS || {
+      'blue-purple': { accent: '#a5202d', secondary: '#486b45' }
     };
     const validCustom = typeof s.customColor === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(s.customColor) ? s.customColor : '';
     const c = validCustom ? { accent: validCustom, secondary: '#486b45' }
@@ -976,63 +980,7 @@ function applySettings(s) {
   applyStylePhrases(s.style || 'zen');
 }
 
-// Per-style localized chrome: brand, tagline, sidebar quote, queue badge, volume label
-const STYLE_PHRASES = {
-  zen: {
-    brand: '音の間', title: '静かな音', volume: '音量', queue: '次',
-    eyebrow: 'NOW PLAYING · 再生中', empty: '静けさの中に、音がある',
-    quote: { text: '古池や<br>蛙飛びこむ<br>水の音', by: '— 松尾芭蕉' },
-    playerTag: '朱に交わる', // vermilion seal accent
-    miniBadge: 'ZEN HI-FI · 96kHz/24bit',
-    mute: ['消音', '音あり'],
-    nav: { home: 'ホーム', search: '検索', favorites: 'お気に入り', playlists: '再生リスト', library: '音楽庫', settings: '設定' },
-  },
-  lofi: {
-    brand: 'salon du son', title: 'douceur sonore', volume: 'volume', queue: '→',
-    eyebrow: 'NOW PLAYING · en cours', empty: 'Dans le calme, la musique',
-    quote: { text: '«La musique est la langue des émotions»', by: '— Voltaire' },
-    playerTag: 'cassette nº1',
-    miniBadge: 'LO-FI · CASSETTE HI-FI',
-    mute: ['silence…', 'le son revient'],
-    nav: { home: 'accueil', search: 'chercher', favorites: 'favoris', playlists: 'listes', library: 'bibliothèque', settings: 'réglages' },
-  },
-  synthwave: {
-    brand: 'SONIDO', title: 'noche de neón', volume: 'VOL', queue: '»',
-    eyebrow: 'NOW PLAYING · REPRODUCIENDO', empty: 'En la noche, el ritmo',
-    quote: { text: 'El silencio es música<br>en pausa', by: '— Retrowave' },
-    playerTag: 'FM 84.0 MHz',
-    miniBadge: 'SYNTHWAVE · FM 84.0',
-    mute: ['SILENCIO', 'SONIDO'],
-    nav: { home: 'inicio', search: 'buscar', favorites: 'favoritos', playlists: 'listas', library: 'biblioteca', settings: 'ajustes' },
-  },
-  aurora: {
-    brand: 'lydrommet', title: 'stillhet og lyd', volume: 'lyd', queue: '→',
-    eyebrow: 'NOW PLAYING · spiller', empty: 'I stillheten finnes tonene',
-    quote: { text: 'Naturen synger<br>sin egen melodi', by: '— Nordlys' },
-    playerTag: 'nordlys aktiv',
-    miniBadge: 'AURORA · POLAR HI-FI',
-    mute: ['hysj…', 'lyden er tilbake'],
-    nav: { home: 'hjem', search: 'søk', favorites: 'favoritter', playlists: 'lister', library: 'bibliotek', settings: 'innstillinger' },
-  },
-  ocean: {
-    brand: 'ABYSSAL', title: 'deep sea vibrations', volume: 'depth', queue: '→',
-    eyebrow: 'NOW PLAYING · SUBMERGED', empty: 'In the depths, only echoes',
-    quote: { text: 'The sea, once it casts its spell,<br>holds one in its net of wonder forever.', by: '— J. Cousteau' },
-    playerTag: 'nautilus 01',
-    miniBadge: 'OCEAN · SONAR HI-FI',
-    mute: ['SILENCE', 'SONAR'],
-    nav: { home: 'home', search: 'sonar', favorites: 'pearls', playlists: 'currents', library: 'abyss', settings: 'config' },
-  },
-  forest: {
-    brand: 'äänihuone', title: ' hiljaa soi', volume: 'ääni', queue: '→',
-    eyebrow: 'NOW PLAYING · soi', empty: 'Hiljaisuudessa laulaa metsä',
-    quote: { text: 'Bambu taipuu,<br>muttei katkea', by: '— Sananlasku' },
-    playerTag: 'viidantaival',
-    miniBadge: 'FOREST · WOODLAND HI-FI',
-    mute: ['hiljaisuus', 'ääni palasi'],
-    nav: { home: 'koti', search: 'haku', favorites: 'suosikit', playlists: 'listat', library: 'kirjasto', settings: 'asetukset' },
-  },
-};
+const STYLE_PHRASES = window.MintPyThemes?.STYLE_PHRASES || {};
 
 function applyStylePhrases(style) {
   const p = STYLE_PHRASES[style] || STYLE_PHRASES.zen;
@@ -2300,3 +2248,32 @@ function initDragAndDrop() {
     }
   });
 }
+
+// Universal player adapter for shared modules (Synced Lyrics, Sleep Timer, Audio FX Halo)
+let _sleepFadeMult = 1.0;
+window.mintpyPlayer = {
+  getCurrentTrack: () => currentTrack,
+  getCurrentTime: () => audio?.currentTime || 0,
+  seekToSeconds: (sec) => {
+    if (audio && Number.isFinite(sec) && audio.duration && isFinite(audio.duration)) {
+      audio.currentTime = Math.max(0, Math.min(audio.duration, sec));
+      updateTimelineUI();
+    }
+  },
+  setSleepFade: (factor) => {
+    _sleepFadeMult = Math.max(0, Math.min(1, factor));
+    if (gainNode && audioCtx) {
+      const base = isMuted ? 0 : (volPercent / 100) * normalizerGain;
+      gainNode.gain.setTargetAtTime(Math.max(0.0001, base * _sleepFadeMult), audioCtx.currentTime, 0.2);
+    } else if (audio) {
+      audio.volume = isMuted ? 0 : (volPercent / 100) * _sleepFadeMult;
+    }
+  },
+  pause: () => {
+    if (isPlaying && !audio.paused) togglePlay();
+  },
+  isPlaying: () => Boolean(isPlaying && audio && !audio.paused),
+  getAnalyser: () => analyser,
+  next: () => nextTrack(),
+  prev: () => prevTrack()
+};

@@ -1,0 +1,505 @@
+/* MintPy v6.0.0 — Desktop animations.css */
+/* ==================== GLOBAL SMOOTH ANIMATIONS ==================== */
+.panel,
+.titlebar,
+.player-bar,
+.settings-group {
+  transition: background-color 0.32s ease, border-color 0.28s ease, color 0.24s ease, box-shadow 0.28s ease;
+}
+
+@keyframes mp-view-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.content-inner.view-enter > * {
+  animation: mp-view-in 0.32s var(--ease-smooth) backwards;
+}
+
+@keyframes mp-row-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.track-row,
+.pl-row,
+.rec-card,
+.queue-item,
+.settings-group {
+  animation: mp-row-in 0.28s var(--ease-smooth) backwards;
+  animation-delay: calc(var(--row-i, 0) * 24ms);
+}
+
+.track-row {
+  transition: background-color 0.18s ease, border-color 0.2s ease, transform 0.2s var(--ease-smooth), opacity 0.18s ease;
+}
+
+.track-row.row-removing {
+  opacity: 0 !important;
+  transform: translateX(18px) scale(0.98) !important;
+  pointer-events: none;
+}
+
+.track-row.playing-row {
+  background: var(--red-soft);
+  border-color: var(--line);
+}
+
+.track-row.playing-row .ttl {
+  color: var(--red);
+}
+
+/* 3-bar active track equalizer indicator */
+.eq-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 13px;
+  width: 16px;
+}
+
+.eq-bars i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--red);
+  transform-origin: bottom center;
+  animation: mp-eq-bar 0.65s ease-in-out infinite alternate;
+}
+
+.eq-bars i:nth-child(1) { animation-duration: 0.55s; animation-delay: 0ms; }
+.eq-bars i:nth-child(2) { animation-duration: 0.72s; animation-delay: 140ms; }
+.eq-bars i:nth-child(3) { animation-duration: 0.62s; animation-delay: 260ms; }
+
+.eq-bars.paused i {
+  animation-play-state: paused;
+  transform: scaleY(0.35);
+}
+
+@keyframes mp-eq-bar {
+  0% { transform: scaleY(0.28); }
+  50% { transform: scaleY(0.95); }
+  100% { transform: scaleY(0.42); }
+}
+
+/* Tactile controls, buttons & badges */
+.track-action,
+.queue-action,
+.pl-icon {
+  transition: transform 0.2s var(--ease-spring), color 0.18s ease, background-color 0.18s ease;
+}
+
+.track-action:hover,
+.queue-action:hover:not(:disabled) {
+  transform: scale(1.12);
+}
+
+.track-action:active,
+.queue-action:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+.pl-row:hover .pl-icon {
+  transform: rotate(0deg) scale(1.06);
+}
+
+@keyframes mp-heart-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.38); }
+  75% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.fav-btn.fav-pop,
+.track-action.fav-btn.fav-pop {
+  animation: mp-heart-pop 0.36s var(--ease-spring);
+}
+
+@keyframes mp-play-pulse {
+  0%, 100% {
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -2px 4px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(165, 32, 45, 0.38);
+  }
+  50% {
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55), inset 0 -2px 4px rgba(0, 0, 0, 0.4), 0 6px 26px rgba(165, 32, 45, 0.62);
+  }
+}
+
+.play-btn.playing {
+  animation: mp-play-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes mp-icon-pop {
+  0% { transform: scale(0.72); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.play-btn.icon-pop .ico {
+  animation: mp-icon-pop 0.24s var(--ease-spring);
+}
+
+/* Now playing cover & metadata swap */
+@keyframes mp-text-swap {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#npTitle.track-swap,
+#npArtist.track-swap,
+.home-track-copy.track-swap {
+  animation: mp-text-swap 0.28s var(--ease-smooth);
+}
+
+@keyframes mp-cover-swap {
+  from { opacity: 0.35; transform: translateY(-50%) scale(0.95); }
+  to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+.home-cover {
+  transition: transform 0.38s var(--ease-smooth), box-shadow 0.38s ease;
+}
+
+.home-cover:hover {
+  transform: translateY(-50%) scale(1.02);
+}
+
+.home-cover.track-swap {
+  animation: mp-cover-swap 0.38s var(--ease-smooth);
+}
+
+@keyframes mp-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.empty .home-brand-logo {
+  animation: mp-float 4.2s ease-in-out infinite;
+}
+
+@keyframes mp-shimmer-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* Smooth seek & volume thumbs */
+.seek-fill::after {
+  transition: transform 0.18s var(--ease-spring), box-shadow 0.18s ease;
+}
+
+.seek-bar:hover .seek-fill::after,
+.seek-bar:active .seek-fill::after {
+  transform: scale(1.22);
+  box-shadow: 0 0 0 4px var(--red-soft), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.vol-fill {
+  transition: width 0.08s linear;
+}
+
+/* Modals, Popups & Pickers */
+@keyframes mp-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mp-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes mp-modal-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes mp-modal-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(12px) scale(0.96); }
+}
+
+@keyframes mp-picker-in {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes mp-picker-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -46%) scale(0.95); }
+}
+
+.modal-overlay {
+  animation: mp-overlay-in 0.2s ease backwards;
+}
+
+.modal-overlay.closing {
+  animation: mp-overlay-out 0.18s ease forwards;
+  pointer-events: none;
+}
+
+.modal {
+  animation: mp-modal-in 0.28s var(--ease-spring) backwards;
+}
+
+.modal-overlay.closing .modal {
+  animation: mp-modal-out 0.18s ease forwards;
+}
+
+#plPicker {
+  animation: mp-picker-in 0.26s var(--ease-spring) backwards;
+}
+
+#plPicker.closing {
+  animation: mp-picker-out 0.18s ease forwards;
+  pointer-events: none;
+}
+
+.pl-pick-row {
+  transition: background-color 0.16s ease, transform 0.16s var(--ease-smooth);
+}
+
+.pl-pick-row:hover {
+  transform: translateX(3px);
+}
+
+/* Lyrics, Ambient, Sleep Popups internal scale transitions */
+.lyrics-card,
+.ambient-popup,
+.sleep-popup {
+  transition: transform 0.3s var(--ease-spring), opacity 0.24s ease;
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.lyrics-overlay.hidden .lyrics-card,
+.ambient-modal.hidden .ambient-popup,
+.sleep-menu.hidden .sleep-popup {
+  transform: translateY(18px) scale(0.95);
+  opacity: 0;
+}
+
+/* Floating Animated Toasts */
+.mp-toast {
+  position: fixed;
+  bottom: 92px;
+  left: 50%;
+  z-index: 9999;
+  max-width: min(82vw, 480px);
+  padding: 11px 22px;
+  border-radius: 14px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+  opacity: 0;
+  transform: translate(-50%, 14px) scale(0.95);
+  transition: opacity 0.26s var(--ease-smooth), transform 0.28s var(--ease-spring);
+}
+
+.mp-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.mp-toast.hide {
+  opacity: 0;
+  transform: translate(-50%, 10px) scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-inner.view-enter > *,
+  .track-row,
+  .pl-row,
+  .rec-card,
+  .queue-item,
+  .settings-group,
+  .empty .home-brand-logo,
+  .play-btn.playing,
+  .rec-loading-shimmer,
+  .modal-overlay,
+  .modal,
+  #plPicker {
+    animation: none !important;
+  }
+  .eq-bars i {
+    animation: none !important;
+  }
+}
+
+/* ==================== v6.0 NEXT-GEN DESKTOP CHOREOGRAPHY ==================== */
+
+/* Directional View Transitions */
+@keyframes mp-view-directional {
+  from {
+    opacity: 0;
+    transform: translate3d(0, var(--mp-view-shift, 14px), 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.content-inner.view-enter > * {
+  animation: mp-view-directional 0.34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Cinematic Theme Switch Veil */
+.mp-theme-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 45%, var(--red-soft), transparent 72%);
+  opacity: 0;
+  transition: opacity 0.38s ease;
+}
+
+.mp-theme-veil.active {
+  animation: mp-veil-flash 0.42s ease-out forwards;
+}
+
+@keyframes mp-veil-flash {
+  0% { opacity: 0.42; }
+  100% { opacity: 0; }
+}
+
+/* Pointer Ripple Effect */
+.play-btn,
+.ctrl-btn,
+.nav-btn,
+.search-btn,
+.bar-tool-btn,
+.mini-ctrl {
+  position: relative;
+  overflow: hidden;
+}
+
+.mp-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0) 70%);
+  transform: scale(0.15);
+  opacity: 0.85;
+  animation: mp-ripple-expand 0.54s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes mp-ripple-expand {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Favorite Heart Spark Particle Burst */
+.mp-spark-burst {
+  position: fixed;
+  width: 0;
+  height: 0;
+  z-index: 9995;
+  pointer-events: none;
+}
+
+.mp-spark-burst i {
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  animation: mp-spark-fly 0.52s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.mp-spark-burst i:nth-child(even) {
+  background: var(--gold, #eab308);
+  box-shadow: 0 0 8px var(--gold, #eab308);
+  width: 5px;
+  height: 5px;
+}
+
+@keyframes mp-spark-fly {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx, 20px), var(--dy, -20px), 0) scale(0.2);
+  }
+}
+
+/* 3D Interactive Card Glare & Hover Lift */
+.rec-card,
+.pl-row {
+  position: relative;
+  will-change: transform;
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.26s ease, border-color 0.22s ease;
+}
+
+.rec-card::after,
+.pl-row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle 140px at var(--glare-x, 50%) var(--glare-y, 50%), rgba(255, 255, 255, 0.16), transparent 72%);
+  transition: opacity 0.22s ease;
+}
+
+.rec-card.is-tilting::after,
+.pl-row.is-tilting::after {
+  opacity: 1;
+}
+
+/* Smooth Track Row & Sidebar Nav Micro-Motion */
+.track-row:hover {
+  transform: translateX(4px);
+}
+
+.nav-btn {
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.24s ease;
+}
+
+.nav-btn:hover:not(.active) {
+  transform: translateX(3px);
+}
+
+.nav-btn.active {
+  box-shadow: inset 3px 0 0 var(--red), 0 4px 14px var(--red-soft);
+}
+
+/* Live Radial WebAudio Spectrum Halo behind Home Vinyl */
+.mp-vinyl-halo-canvas {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Karaoke Lyric Smooth Active Glow */
+.lyric-line {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), color 0.26s ease, opacity 0.26s ease, text-shadow 0.3s ease;
+}
+
+.lyric-line.active {
+  transform: scale(1.05) translateX(4px);
+  text-shadow: 0 0 22px var(--red-soft);
+}
+
+.lyric-line.near {
+  opacity: 0.72;
+}

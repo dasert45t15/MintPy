@@ -40,7 +40,7 @@ $ResFile = Join-Path $NativeDir "res\resource.res"
 
 if ((Test-Path $Windres) -and (Test-Path $RcFile)) {
   Write-Host "Compiling Windows resource icon with windres..."
-  & $Windres -i $RcFile -O coff -o $ResFile
+  & $Windres -I (Split-Path $RcFile) -i $RcFile -O coff -o $ResFile
   if ($LASTEXITCODE -eq 0 -and (Test-Path $ResFile)) {
     $Sources += $ResFile
   }

@@ -1,0 +1,910 @@
+/* MintPy v6.0.0 — Desktop mini-player.css */
+/* ==================== MINI-PLAYER FLOATING WIDGET ==================== */
+.mini-player-widget {
+  display: none;
+}
+
+body.mini-mode {
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+body.mini-mode #app,
+body.mini-mode #mintpy-setup-overlay,
+body.mini-mode #mintpy-dropzone-overlay,
+body.mini-mode #ambientOverlay,
+body.mini-mode #ambientBackdrop,
+body.mini-mode #sakuraCanvas {
+  display: none !important;
+}
+
+body.mini-mode .mini-player-widget {
+  /* Mini-Player Theme Tokens (defaults follow Zen Dark & --red accent) */
+  --mp-accent: var(--red, #a5202d);
+  --mp-accent-2: color-mix(in srgb, var(--red, #a5202d) 62%, #ffffff);
+  --mp-accent-dark: color-mix(in srgb, var(--red, #a5202d) 52%, #000000);
+  --mp-accent-glow: color-mix(in srgb, var(--red, #a5202d) 46%, transparent);
+  --mp-accent-soft: color-mix(in srgb, var(--red, #a5202d) 14%, transparent);
+  --mp-bg-base: #121417;
+  --mp-bg-grad: linear-gradient(175deg, rgba(22, 25, 29, 0.86) 0%, rgba(14, 16, 19, 0.92) 55%, rgba(9, 10, 12, 0.96) 100%);
+  --mp-bg-img: url("../../assets/themes/zen-dark-bg.jpg");
+  --mp-border: color-mix(in srgb, var(--mp-accent) 34%, transparent);
+  --mp-border-top: color-mix(in srgb, var(--mp-accent-2) 50%, transparent);
+  --mp-text: #f3efe6;
+  --mp-muted: #a6a095;
+  --mp-topbar-line: rgba(255, 255, 255, 0.07);
+  --mp-wb-bg: linear-gradient(180deg, #252a2f 0%, #15181b 100%);
+  --mp-wb-hover: linear-gradient(180deg, #323841 0%, #1f2328 100%);
+  --mp-wb-text: #a6b0be;
+  --mp-btn-bg: linear-gradient(180deg, #272c32 0%, #17191d 100%);
+  --mp-btn-hover: linear-gradient(180deg, #353b44 0%, #202429 100%);
+  --mp-btn-text: #cbd5e1;
+  --mp-btn-border: rgba(255, 255, 255, 0.14);
+  --mp-play-bg: radial-gradient(circle at 35% 30%, var(--mp-accent-2) 0%, var(--mp-accent) 56%, var(--mp-accent-dark) 100%);
+  --mp-play-text: #ffffff;
+  --mp-play-border: color-mix(in srgb, var(--mp-accent-2) 85%, #ffffff);
+  --mp-pill-bg: linear-gradient(180deg, rgba(34, 38, 43, 0.88) 0%, rgba(20, 22, 25, 0.92) 100%);
+  --mp-pill-hover: linear-gradient(180deg, rgba(45, 51, 58, 0.95) 0%, rgba(26, 30, 34, 0.96) 100%);
+  --mp-track-bg: rgba(0, 0, 0, 0.5);
+  --mp-scrubber-bg: rgba(255, 255, 255, 0.1);
+  --mp-badge-text: var(--mp-accent-2);
+
+  display: flex !important;
+  flex-direction: column;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  box-sizing: border-box;
+  background-color: var(--mp-bg-base);
+  background-image:
+    radial-gradient(circle at 18% 50%, var(--mp-accent-soft) 0%, transparent 65%),
+    var(--mp-bg-grad),
+    var(--mp-bg-img);
+  background-size: auto, auto, cover;
+  background-position: center;
+  border: 1px solid var(--mp-border);
+  border-top: 1px solid var(--mp-border-top);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 12px 36px rgba(0, 0, 0, 0.65);
+  user-select: none;
+  z-index: 100000;
+  padding: 8px 14px 7px 14px;
+  justify-content: space-between;
+  overflow: hidden;
+  transition: all 0.24s var(--ios-spring);
+}
+
+/* Background Atmosphere & Ambient Artwork Blur */
+.mini-ambient-glow {
+  position: absolute;
+  inset: -20px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(38px) saturate(1.8) brightness(0.85);
+  opacity: 0.22;
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.6s ease, background-image 0.6s ease;
+}
+
+body.is-playing .mini-ambient-glow {
+  opacity: 0.34;
+  animation: miniGlowBreathe 5s ease-in-out infinite;
+}
+
+@keyframes miniGlowBreathe {
+  0%, 100% { transform: scale(1); opacity: 0.28; }
+  50% { transform: scale(1.06); opacity: 0.4; }
+}
+
+.mini-zen-wave-art {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.mini-zen-wave-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.mini-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  -webkit-app-region: drag;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--mp-topbar-line);
+  position: relative;
+  z-index: 2;
+}
+
+.mini-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--mp-text);
+  letter-spacing: 0.8px;
+}
+
+.mini-leaf-badge {
+  width: 16px;
+  height: 16px;
+  display: block;
+  filter: drop-shadow(0 0 6px var(--mp-accent-glow));
+}
+
+.mini-visualizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 12px;
+  margin-left: 6px;
+  padding-bottom: 1px;
+}
+
+.mini-visualizer .bar {
+  width: 2.5px;
+  background: linear-gradient(180deg, var(--mp-accent-2), var(--mp-accent));
+  border-radius: 9999px;
+  height: 3px;
+  box-shadow: 0 0 6px var(--mp-accent-glow);
+  transition: height 0.18s ease;
+}
+
+body.is-playing .mini-visualizer .bar-1 { animation: miniEq 0.65s ease-in-out infinite alternate; }
+body.is-playing .mini-visualizer .bar-2 { animation: miniEq 0.48s ease-in-out 0.15s infinite alternate; }
+body.is-playing .mini-visualizer .bar-3 { animation: miniEq 0.58s ease-in-out 0.35s infinite alternate; }
+body.is-playing .mini-visualizer .bar-4 { animation: miniEq 0.75s ease-in-out 0.1s infinite alternate; }
+
+@keyframes miniEq {
+  0% { height: 3px; opacity: 0.6; }
+  100% { height: 11px; opacity: 1; }
+}
+
+.mini-win-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  -webkit-app-region: no-drag;
+}
+
+.mini-wb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--mp-btn-border);
+  background: var(--mp-wb-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 2px 6px rgba(0, 0, 0, 0.35);
+  color: var(--mp-wb-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s var(--ios-spring);
+}
+
+.mini-wb:hover {
+  background: var(--mp-wb-hover);
+  border-color: var(--mp-accent);
+  color: var(--mp-accent-2);
+  transform: translateY(-1px);
+}
+
+.mini-wb:active {
+  background: #111316;
+  transform: translateY(1px) scale(0.92);
+}
+
+.mini-wb.close:hover {
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+}
+
+.mini-wb .ico {
+  width: 11px;
+  height: 11px;
+}
+
+.mini-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  -webkit-app-region: drag;
+  padding: 3px 0 1px;
+  position: relative;
+  z-index: 2;
+}
+
+/* ============================================================
+   TURNTABLE STAGE (CONCEPT 2 HERO ELEMENT)
+   Clean deck mounting with zero boxy frames
+   ============================================================ */
+.mini-turntable-stage {
+  position: relative;
+  width: 82px;
+  height: 76px;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+/* Plinth is transparent to eliminate any boxy borders */
+.mini-turntable-plinth {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: visible;
+}
+
+/* Platter Well & Rotating Disc */
+.mini-platter {
+  position: relative;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 45%, #242930 0%, #121417 75%, #08090a 100%);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.9),
+    0 0 0 1px var(--mp-border),
+    0 3px 12px rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mini-platter-disc {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: 
+    repeating-radial-gradient(
+      circle at center,
+      #0e1012 0px,
+      #0e1012 2px,
+      #1b1e22 2.5px,
+      #0a0b0d 3px,
+      #14171a 4px
+    );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 3px 10px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: miniTurntableSpin 4s linear infinite;
+  animation-play-state: paused;
+}
+
+/* Vinyl dynamic light reflection */
+.mini-disc-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 45deg,
+    var(--mp-accent-soft) 0deg,
+    transparent 50deg,
+    rgba(255, 255, 255, 0.12) 110deg,
+    transparent 160deg,
+    var(--mp-accent-soft) 220deg,
+    transparent 280deg,
+    rgba(255, 255, 255, 0.1) 340deg,
+    var(--mp-accent-soft) 360deg
+  );
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* Vinyl label & Album Art */
+.mini-disc-label-wrap {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1.5px solid var(--mp-accent);
+  box-shadow: 0 0 0 1px #000, 0 0 8px var(--mp-accent-glow);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.mini-disc-label-wrap .mini-cover-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Heavy Center Clamp / Spindle */
+.mini-disc-clamp {
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, var(--mp-accent-2) 50%, var(--mp-accent-dark) 100%);
+  border: 1px solid var(--mp-accent-2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+  z-index: 3;
+}
+
+/* Rotation during playback */
+body.is-playing .mini-platter-disc {
+  animation-play-state: running;
+}
+
+@keyframes miniTurntableSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   PRECISION ARTICULATED HI-FI TONEARM ASSEMBLY
+   Millimeter-accurate vector tonearm with rest post and mechanical glide
+   ============================================================ */
+.mini-tonearm-rest {
+  position: absolute;
+  top: 36px;
+  right: 6px;
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #373c43 0%, #16181b 100%);
+  border: 0.5px solid var(--mp-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.mini-tonearm-rest::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  right: 1px;
+  height: 2.5px;
+  background: var(--mp-accent);
+  border-radius: 1px;
+}
+
+.mini-tonearm-assembly {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  width: 32px;
+  height: 54px;
+  pointer-events: none;
+  z-index: 10;
+  transform-origin: 18px 8px;
+  transform: rotate(-14deg);
+  transition: transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(1px 3px 5px rgba(0, 0, 0, 0.8));
+}
+
+/* When playing, the tonearm smoothly glides onto the vinyl record */
+body.is-playing .mini-tonearm-assembly {
+  transform: rotate(18deg);
+}
+
+.mini-tonearm-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ============================================================
+   CONTENT COLUMN (METADATA & CONTROLS)
+   ============================================================ */
+.mini-content-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
+/* Eyebrow: Hi-Fi badge + Time */
+.mini-meta-eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.mini-hifi-badge {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--mp-badge-text);
+  background: var(--mp-accent-soft);
+  border: 1px solid var(--mp-border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  text-shadow: 0 0 6px var(--mp-accent-glow);
+}
+
+.mini-time {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--mp-muted);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.mini-meta {
+  min-width: 0;
+}
+
+.mini-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--mp-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.2px;
+}
+
+.mini-artist {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--mp-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Controls Bar */
+.mini-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  -webkit-app-region: no-drag;
+  margin-top: 2px;
+}
+
+/* Theme-Aware Precision Buttons */
+.mini-ctrl {
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  border: 1px solid var(--mp-btn-border);
+  background: var(--mp-btn-bg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.28);
+  color: var(--mp-btn-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s var(--ios-spring);
+}
+
+.mini-ctrl:hover {
+  background: var(--mp-btn-hover);
+  border-color: var(--mp-accent);
+  color: var(--mp-accent-2);
+  transform: translateY(-1px);
+}
+
+.mini-ctrl:active {
+  filter: brightness(0.92);
+  transform: translateY(1px) scale(0.94);
+}
+
+/* HERO PLAY BUTTON */
+.mini-ctrl.primary {
+  width: 31px;
+  height: 31px;
+  background: var(--mp-play-bg);
+  border: 1px solid var(--mp-play-border);
+  color: var(--mp-play-text);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.55),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.35),
+    0 4px 14px var(--mp-accent-glow);
+}
+
+.mini-ctrl.primary:hover {
+  filter: brightness(1.1);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.65),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.3),
+    0 5px 20px var(--mp-accent-glow);
+  transform: translateY(-1px) scale(1.06);
+}
+
+.mini-ctrl.primary:active {
+  transform: translateY(1px) scale(0.94);
+}
+
+.mini-ctrl .ico {
+  width: 13px;
+  height: 13px;
+}
+
+.mini-ctrl.primary .ico {
+  width: 15px;
+  height: 15px;
+}
+
+/* ============================================================
+   PRECISION THEME-MATCHED VOLUME PILL
+   ============================================================ */
+.mini-vol-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 6px;
+  border-radius: 9999px;
+  background: var(--mp-pill-bg);
+  border: 1px solid var(--mp-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: all 0.18s var(--ios-spring);
+}
+
+.mini-vol-pill:hover {
+  background: var(--mp-pill-hover);
+  border-color: var(--mp-accent);
+  box-shadow: 0 0 10px var(--mp-accent-soft);
+}
+
+.mini-vol-icon-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--mp-badge-text);
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.mini-vol-icon-btn:hover {
+  color: var(--mp-text);
+  transform: scale(1.1);
+}
+
+.mini-vol-icon-btn.is-muted {
+  color: #ef4444;
+}
+
+.mini-vol-svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mini-vol-track {
+  position: relative;
+  width: 42px;
+  height: 4px;
+  background: var(--mp-track-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.mini-vol-fill {
+  height: 100%;
+  width: 30%;
+  background: linear-gradient(90deg, var(--mp-accent), var(--mp-accent-2));
+  box-shadow: 0 0 8px var(--mp-accent-glow);
+  border-radius: 9999px;
+  transition: width 0.08s ease;
+}
+
+.mini-vol-val {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--mp-badge-text);
+  font-variant-numeric: tabular-nums;
+  min-width: 24px;
+  text-align: right;
+  letter-spacing: -0.2px;
+}
+
+/* ============================================================
+   BOTTOM SCRUBBER (THEME-MATCHED)
+   ============================================================ */
+.mini-scrubber-track {
+  width: 100%;
+  height: 3px;
+  background: var(--mp-scrubber-bg);
+  border-radius: 9999px;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+  margin-top: 3px;
+  -webkit-app-region: no-drag;
+  transition: height 0.15s ease;
+  z-index: 2;
+}
+
+.mini-scrubber-track:hover {
+  height: 5px;
+}
+
+.mini-scrubber-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--mp-accent) 0%, var(--mp-accent-2) 100%);
+  box-shadow: 0 0 10px var(--mp-accent-glow);
+  border-radius: 9999px;
+  transition: width 0.1s linear;
+}
+
+/* ============================================================
+   MINI-PLAYER THEME PALETTES (MATCH MAIN APP STYLE + LIGHT/DARK)
+   ============================================================ */
+/* Zen Light (respects --red user accent) */
+:root[data-theme="light"][data-style="zen"] .mini-player-widget {
+  --mp-bg-base: #f4efe6;
+  --mp-bg-img: url("../../assets/themes/zen-light-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(250, 246, 238, 0.80) 0%, rgba(242, 235, 222, 0.88) 60%, rgba(232, 223, 208, 0.94) 100%);
+  --mp-text: #1f1c18;
+  --mp-muted: #6e6357;
+  --mp-topbar-line: rgba(68, 55, 42, 0.12);
+  --mp-wb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(236, 229, 217, 0.8) 100%);
+  --mp-wb-hover: linear-gradient(180deg, #ffffff 0%, #f5efe4 100%);
+  --mp-wb-text: #5a4f44;
+  --mp-btn-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(238, 231, 219, 0.84) 100%);
+  --mp-btn-hover: linear-gradient(180deg, #ffffff 0%, #f6efe3 100%);
+  --mp-btn-text: #2a241e;
+  --mp-btn-border: rgba(68, 55, 42, 0.16);
+  --mp-pill-bg: rgba(255, 253, 248, 0.78);
+  --mp-pill-hover: rgba(255, 255, 255, 0.95);
+  --mp-track-bg: rgba(68, 55, 42, 0.18);
+  --mp-scrubber-bg: rgba(68, 55, 42, 0.14);
+  --mp-badge-text: var(--mp-accent);
+  --mp-play-text: #ffffff;
+}
+
+/* Lo-Fi Dark */
+:root[data-style="lofi"] .mini-player-widget {
+  --mp-accent: #e07a5f;
+  --mp-accent-2: #f4c38e;
+  --mp-accent-dark: #9c4a34;
+  --mp-accent-glow: rgba(224, 122, 95, 0.45);
+  --mp-accent-soft: rgba(224, 122, 95, 0.16);
+  --mp-bg-base: #1c1713;
+  --mp-bg-img: url("../../assets/themes/lofi-dark-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(32, 24, 18, 0.84) 0%, rgba(24, 18, 13, 0.90) 60%, rgba(16, 12, 9, 0.95) 100%);
+  --mp-text: #f5ebd9;
+  --mp-muted: #c2b098;
+}
+
+/* Lo-Fi Light */
+:root[data-theme="light"][data-style="lofi"] .mini-player-widget {
+  --mp-accent: #c9664a;
+  --mp-accent-2: #e89b6e;
+  --mp-accent-dark: #8a3f29;
+  --mp-accent-glow: rgba(201, 102, 74, 0.35);
+  --mp-accent-soft: rgba(201, 102, 74, 0.14);
+  --mp-bg-base: #f6efe4;
+  --mp-bg-img: url("../../assets/themes/lofi-light-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(248, 239, 224, 0.80) 0%, rgba(238, 225, 204, 0.88) 60%, rgba(226, 210, 186, 0.93) 100%);
+  --mp-text: #2e241b;
+  --mp-muted: #7a6856;
+  --mp-topbar-line: rgba(120, 95, 70, 0.15);
+  --mp-wb-bg: linear-gradient(180deg, rgba(255, 250, 242, 0.9) 0%, rgba(234, 220, 200, 0.85) 100%);
+  --mp-wb-hover: linear-gradient(180deg, #ffffff 0%, #f5ebd9 100%);
+  --mp-wb-text: #6e5946;
+  --mp-btn-bg: linear-gradient(180deg, rgba(255, 252, 246, 0.92) 0%, rgba(236, 224, 204, 0.84) 100%);
+  --mp-btn-hover: linear-gradient(180deg, #ffffff 0%, #f8f0e2 100%);
+  --mp-btn-text: #3d3229;
+  --mp-btn-border: rgba(120, 95, 70, 0.2);
+  --mp-pill-bg: rgba(255, 250, 242, 0.78);
+  --mp-pill-hover: rgba(255, 252, 248, 0.96);
+  --mp-track-bg: rgba(120, 95, 70, 0.18);
+  --mp-scrubber-bg: rgba(120, 95, 70, 0.15);
+  --mp-badge-text: #b85538;
+  --mp-play-text: #ffffff;
+}
+
+/* Synthwave Dark */
+:root[data-style="synthwave"] .mini-player-widget {
+  --mp-accent: #ff2d95;
+  --mp-accent-2: #2de2e6;
+  --mp-accent-dark: #931059;
+  --mp-accent-glow: rgba(255, 45, 149, 0.52);
+  --mp-accent-soft: rgba(255, 45, 149, 0.16);
+  --mp-bg-base: #12081c;
+  --mp-bg-img: url("../../assets/themes/synthwave-dark-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(26, 12, 40, 0.76) 0%, rgba(16, 8, 26, 0.86) 60%, rgba(10, 4, 18, 0.93) 100%);
+  --mp-text: #f7ebff;
+  --mp-muted: #c2a5e0;
+  --mp-btn-bg: linear-gradient(180deg, rgba(48, 22, 70, 0.9) 0%, rgba(24, 12, 38, 0.92) 100%);
+  --mp-btn-hover: linear-gradient(180deg, rgba(70, 32, 98, 0.95) 0%, rgba(36, 18, 56, 0.95) 100%);
+  --mp-pill-bg: linear-gradient(180deg, rgba(40, 18, 60, 0.86) 0%, rgba(22, 10, 34, 0.92) 100%);
+  --mp-pill-hover: linear-gradient(180deg, rgba(56, 26, 82, 0.94) 0%, rgba(30, 14, 48, 0.96) 100%);
+}
+
+/* Synthwave Light (Pastel Vaporwave) */
+:root[data-theme="light"][data-style="synthwave"] .mini-player-widget {
+  --mp-accent: #e01b84;
+  --mp-accent-2: #00b4d8;
+  --mp-accent-dark: #8c0c52;
+  --mp-accent-glow: rgba(224, 27, 132, 0.36);
+  --mp-accent-soft: rgba(224, 27, 132, 0.14);
+  --mp-bg-base: #f5e6f7;
+  --mp-bg-img: url("../../assets/themes/synthwave-light-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(252, 236, 248, 0.72) 0%, rgba(232, 240, 252, 0.82) 60%, rgba(215, 228, 246, 0.90) 100%);
+  --mp-text: #221438;
+  --mp-muted: #5e4b7a;
+  --mp-topbar-line: rgba(140, 30, 120, 0.14);
+  --mp-wb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.86) 0%, rgba(236, 226, 248, 0.8) 100%);
+  --mp-wb-hover: linear-gradient(180deg, #ffffff 0%, #f7ebfc 100%);
+  --mp-wb-text: #563e75;
+  --mp-btn-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(236, 224, 248, 0.82) 100%);
+  --mp-btn-hover: linear-gradient(180deg, #ffffff 0%, #f5e8fc 100%);
+  --mp-btn-text: #2c1947;
+  --mp-btn-border: rgba(140, 40, 140, 0.18);
+  --mp-pill-bg: rgba(255, 248, 255, 0.78);
+  --mp-pill-hover: rgba(255, 255, 255, 0.96);
+  --mp-track-bg: rgba(80, 40, 110, 0.16);
+  --mp-scrubber-bg: rgba(80, 40, 110, 0.14);
+  --mp-badge-text: #c21870;
+  --mp-play-text: #ffffff;
+}
+
+/* Ocean Dark */
+:root[data-style="ocean"] .mini-player-widget {
+  --mp-accent: #00b4d8;
+  --mp-accent-2: #7ee8fa;
+  --mp-accent-dark: #006680;
+  --mp-accent-glow: rgba(0, 212, 255, 0.48);
+  --mp-accent-soft: rgba(0, 212, 255, 0.15);
+  --mp-bg-base: #000c14;
+  --mp-bg-img: url("../../assets/themes/ocean-dark-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(0, 24, 42, 0.78) 0%, rgba(0, 16, 30, 0.88) 60%, rgba(0, 10, 20, 0.95) 100%);
+  --mp-text: #e6f9ff;
+  --mp-muted: #82bccf;
+  --mp-btn-bg: linear-gradient(180deg, rgba(8, 42, 64, 0.9) 0%, rgba(4, 24, 38, 0.92) 100%);
+  --mp-btn-hover: linear-gradient(180deg, rgba(12, 60, 90, 0.95) 0%, rgba(6, 36, 56, 0.95) 100%);
+  --mp-pill-bg: linear-gradient(180deg, rgba(8, 36, 56, 0.88) 0%, rgba(4, 20, 32, 0.92) 100%);
+  --mp-pill-hover: linear-gradient(180deg, rgba(12, 52, 78, 0.95) 0%, rgba(6, 30, 46, 0.96) 100%);
+}
+
+/* Ocean Light */
+:root[data-theme="light"][data-style="ocean"] .mini-player-widget {
+  --mp-accent: #0077b6;
+  --mp-accent-2: #38bdf8;
+  --mp-accent-dark: #004e7a;
+  --mp-accent-glow: rgba(0, 119, 182, 0.35);
+  --mp-accent-soft: rgba(0, 119, 182, 0.14);
+  --mp-bg-base: #e6f7fb;
+  --mp-bg-img: url("../../assets/themes/ocean-light-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(236, 250, 254, 0.76) 0%, rgba(214, 242, 250, 0.86) 60%, rgba(196, 232, 244, 0.92) 100%);
+  --mp-text: #06283d;
+  --mp-muted: #2d6682;
+  --mp-topbar-line: rgba(0, 100, 150, 0.14);
+  --mp-wb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(220, 244, 252, 0.82) 100%);
+  --mp-wb-hover: linear-gradient(180deg, #ffffff 0%, #e6f8fd 100%);
+  --mp-wb-text: #1c5a78;
+  --mp-btn-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(222, 244, 252, 0.84) 100%);
+  --mp-btn-hover: linear-gradient(180deg, #ffffff 0%, #e4f7fc 100%);
+  --mp-btn-text: #08334d;
+  --mp-btn-border: rgba(0, 119, 182, 0.18);
+  --mp-pill-bg: rgba(255, 255, 255, 0.78);
+  --mp-pill-hover: rgba(255, 255, 255, 0.96);
+  --mp-track-bg: rgba(0, 90, 140, 0.18);
+  --mp-scrubber-bg: rgba(0, 90, 140, 0.14);
+  --mp-badge-text: #006699;
+  --mp-play-text: #ffffff;
+}
+
+/* Forest Dark */
+:root[data-style="forest"] .mini-player-widget {
+  --mp-accent: #52b788;
+  --mp-accent-2: #9ef01a;
+  --mp-accent-dark: #22543d;
+  --mp-accent-glow: rgba(82, 183, 136, 0.45);
+  --mp-accent-soft: rgba(82, 183, 136, 0.15);
+  --mp-bg-base: #0d1610;
+  --mp-bg-img: url("../../assets/themes/forest-dark-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(16, 28, 20, 0.82) 0%, rgba(12, 20, 15, 0.90) 60%, rgba(8, 13, 10, 0.96) 100%);
+  --mp-text: #e8f3ea;
+  --mp-muted: #9eb8a3;
+  --mp-btn-bg: linear-gradient(180deg, rgba(26, 44, 32, 0.9) 0%, rgba(15, 26, 18, 0.92) 100%);
+  --mp-btn-hover: linear-gradient(180deg, rgba(38, 64, 46, 0.95) 0%, rgba(22, 38, 26, 0.95) 100%);
+  --mp-pill-bg: linear-gradient(180deg, rgba(24, 38, 28, 0.88) 0%, rgba(14, 24, 17, 0.92) 100%);
+  --mp-pill-hover: linear-gradient(180deg, rgba(34, 54, 40, 0.95) 0%, rgba(20, 34, 24, 0.96) 100%);
+}
+
+/* Forest Light */
+:root[data-theme="light"][data-style="forest"] .mini-player-widget {
+  --mp-accent: #2f6b4f;
+  --mp-accent-2: #74c69d;
+  --mp-accent-dark: #1b4332;
+  --mp-accent-glow: rgba(47, 107, 79, 0.35);
+  --mp-accent-soft: rgba(47, 107, 79, 0.14);
+  --mp-bg-base: #eef4eb;
+  --mp-bg-img: url("../../assets/themes/forest-light-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(242, 248, 238, 0.78) 0%, rgba(226, 238, 220, 0.86) 60%, rgba(210, 226, 202, 0.92) 100%);
+  --mp-text: #1b2a1f;
+  --mp-muted: #4b6350;
+  --mp-topbar-line: rgba(45, 80, 50, 0.14);
+  --mp-wb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(224, 236, 218, 0.82) 100%);
+  --mp-wb-hover: linear-gradient(180deg, #ffffff 0%, #ebf5e6 100%);
+  --mp-wb-text: #3a5940;
+  --mp-btn-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(226, 238, 220, 0.84) 100%);
+  --mp-btn-hover: linear-gradient(180deg, #ffffff 0%, #eaf5e5 100%);
+  --mp-btn-text: #1f3324;
+  --mp-btn-border: rgba(45, 85, 55, 0.18);
+  --mp-pill-bg: rgba(255, 255, 255, 0.78);
+  --mp-pill-hover: rgba(255, 255, 255, 0.96);
+  --mp-track-bg: rgba(40, 75, 48, 0.18);
+  --mp-scrubber-bg: rgba(40, 75, 48, 0.14);
+  --mp-badge-text: #275940;
+  --mp-play-text: #ffffff;
+}
+
+/* Aurora Dark */
+:root[data-style="aurora"] .mini-player-widget {
+  --mp-accent: #00c9c8;
+  --mp-accent-2: #a5a6f6;
+  --mp-accent-dark: #2e3880;
+  --mp-accent-glow: rgba(0, 201, 200, 0.45);
+  --mp-accent-soft: rgba(0, 201, 200, 0.15);
+  --mp-bg-base: #0d1220;
+  --mp-bg-img: url("../../assets/themes/aurora-dark-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(16, 22, 42, 0.76) 0%, rgba(12, 16, 32, 0.86) 60%, rgba(8, 10, 22, 0.94) 100%);
+  --mp-text: #edf2ff;
+  --mp-muted: #a0b0d8;
+  --mp-btn-bg: linear-gradient(180deg, rgba(26, 34, 60, 0.88) 0%, rgba(16, 20, 38, 0.92) 100%);
+  --mp-btn-hover: linear-gradient(180deg, rgba(38, 48, 84, 0.95) 0%, rgba(22, 28, 52, 0.95) 100%);
+  --mp-pill-bg: linear-gradient(180deg, rgba(24, 32, 56, 0.88) 0%, rgba(14, 18, 34, 0.92) 100%);
+  --mp-pill-hover: linear-gradient(180deg, rgba(34, 44, 76, 0.95) 0%, rgba(20, 26, 48, 0.96) 100%);
+}
+
+/* Aurora Light (Frosted Ice) */
+:root[data-theme="light"][data-style="aurora"] .mini-player-widget {
+  --mp-accent: #5750d6;
+  --mp-accent-2: #00b8c4;
+  --mp-accent-dark: #3730a3;
+  --mp-accent-glow: rgba(87, 80, 214, 0.34);
+  --mp-accent-soft: rgba(87, 80, 214, 0.13);
+  --mp-bg-base: #eef3fb;
+  --mp-bg-img: url("../../assets/themes/aurora-light-bg.jpg");
+  --mp-bg-grad: linear-gradient(175deg, rgba(244, 248, 255, 0.76) 0%, rgba(226, 236, 250, 0.86) 60%, rgba(210, 224, 246, 0.92) 100%);
+  --mp-text: #1c243b;
+  --mp-muted: #526085;
+  --mp-topbar-line: rgba(70, 85, 135, 0.14);
+  --mp-wb-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(228, 236, 250, 0.84) 100%);
+  --mp-wb-hover: linear-gradient(180deg, #ffffff 0%, #eef4ff 100%);
+  --mp-wb-text: #465378;
+  --mp-btn-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(228, 236, 250, 0.85) 100%);
+  --mp-btn-hover: linear-gradient(180deg, #ffffff 0%, #eef4ff 100%);
+  --mp-btn-text: #232c47;
+  --mp-btn-border: rgba(80, 95, 145, 0.18);
+  --mp-pill-bg: rgba(255, 255, 255, 0.8);
+  --mp-pill-hover: rgba(255, 255, 255, 0.96);
+  --mp-track-bg: rgba(65, 80, 130, 0.16);
+  --mp-scrubber-bg: rgba(65, 80, 130, 0.14);
+  --mp-badge-text: #4c46b8;
+  --mp-play-text: #ffffff;
+}

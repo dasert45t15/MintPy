@@ -1,0 +1,167 @@
+/* MintPy v6.0.0 — Mobile themes.css */
+/* Theme 1: Zen 🎋 */
+:root[data-style="zen"] {
+  --theme-bg: url("../../assets/themes/mobile/zen-dark-mobile.jpg");
+  --accent: #c25953;
+  --accent-glow: rgba(194, 89, 83, 0.4);
+}
+:root[data-theme="light"][data-style="zen"] {
+  --theme-bg: url("../../assets/themes/mobile/zen-light-mobile.jpg");
+  --accent: #b0413b;
+  --accent-glow: rgba(176, 65, 59, 0.3);
+}
+
+/* Theme 2: Lo-Fi ☕ */
+:root[data-style="lofi"] {
+  --theme-bg: url("../../assets/themes/mobile/lofi-dark-mobile.jpg");
+  --accent: #d4a373;
+  --accent-glow: rgba(212, 163, 115, 0.4);
+}
+:root[data-theme="light"][data-style="lofi"] {
+  --theme-bg: url("../../assets/themes/mobile/lofi-light-mobile.jpg");
+  --accent: #9c6644;
+  --accent-glow: rgba(156, 102, 68, 0.3);
+}
+
+/* Theme 3: Synthwave 🌆 */
+:root[data-style="synthwave"] {
+  --theme-bg: url("../../assets/themes/mobile/synthwave-dark-mobile.jpg");
+  --accent: #ff2d95;
+  --accent-glow: rgba(255, 45, 149, 0.45);
+}
+:root[data-theme="light"][data-style="synthwave"] {
+  --theme-bg: url("../../assets/themes/mobile/synthwave-light-mobile.jpg");
+  --accent: #d9048a;
+  --accent-glow: rgba(217, 4, 138, 0.35);
+}
+
+/* Theme 4: Ocean 🌊 */
+:root[data-style="ocean"] {
+  --theme-bg: url("../../assets/themes/mobile/ocean-dark-mobile.jpg");
+  --accent: #00b4d8;
+  --accent-glow: rgba(0, 180, 216, 0.45);
+}
+:root[data-theme="light"][data-style="ocean"] {
+  --theme-bg: url("../../assets/themes/mobile/ocean-light-mobile.jpg");
+  --accent: #0077b6;
+  --accent-glow: rgba(0, 119, 182, 0.35);
+}
+
+/* Theme 5: Forest 🌲 */
+:root[data-style="forest"] {
+  --theme-bg: url("../../assets/themes/mobile/forest-dark-mobile.jpg");
+  --accent: #52b788;
+  --accent-glow: rgba(82, 183, 136, 0.45);
+}
+:root[data-theme="light"][data-style="forest"] {
+  --theme-bg: url("../../assets/themes/mobile/forest-light-mobile.jpg");
+  --accent: #2d6a4f;
+  --accent-glow: rgba(45, 106, 79, 0.35);
+}
+
+/* Theme 6: Aurora ✨ */
+:root[data-style="aurora"] {
+  --theme-bg: url("../../assets/themes/mobile/aurora-dark-mobile.jpg");
+  --accent: #00c9c8;
+  --accent-glow: rgba(0, 201, 200, 0.45);
+}
+:root[data-theme="light"][data-style="aurora"] {
+  --theme-bg: url("../../assets/themes/mobile/aurora-light-mobile.jpg");
+  --accent: #0e9aa7;
+  --accent-glow: rgba(14, 154, 167, 0.35);
+}
+
+/* Theme 7: Sakura Night 🌸 */
+:root[data-style="sakura"] {
+  --accent: #ff7eb3;
+  --accent-glow: rgba(255, 126, 179, 0.45);
+}
+:root[data-theme="light"][data-style="sakura"] {
+  --accent: #d6336c;
+  --accent-glow: rgba(214, 51, 108, 0.35);
+}
+
+/* Theme 8: Midnight Gold 🌙 */
+:root[data-style="midnight"] {
+  --accent: #f0c068;
+  --accent-glow: rgba(240, 192, 104, 0.45);
+}
+:root[data-theme="light"][data-style="midnight"] {
+  --accent: #b07d2b;
+  --accent-glow: rgba(176, 125, 43, 0.32);
+}
+
+/* Theme 9: Cyberpunk ⚡ */
+:root[data-style="cyber"] {
+  --accent: #00f5d4;
+  --accent-glow: rgba(0, 245, 212, 0.45);
+}
+:root[data-theme="light"][data-style="cyber"] {
+  --accent: #009688;
+  --accent-glow: rgba(0, 150, 136, 0.32);
+}
+
+/* Direct style background rules for bulletproof rendering in Android WebView */
+[data-style="zen"] .mobile-app { background-image: url("../../assets/themes/mobile/zen-dark-mobile.jpg") !important; }
+[data-theme="light"][data-style="zen"] .mobile-app { background-image: url("../../assets/themes/mobile/zen-light-mobile.jpg") !important; }
+
+[data-style="lofi"] .mobile-app { background-image: url("../../assets/themes/mobile/lofi-dark-mobile.jpg") !important; }
+[data-theme="light"][data-style="lofi"] .mobile-app { background-image: url("../../assets/themes/mobile/lofi-light-mobile.jpg") !important; }
+
+[data-style="synthwave"] .mobile-app { background-image: url("../../assets/themes/mobile/synthwave-dark-mobile.jpg") !important; }
+[data-theme="light"][data-style="synthwave"] .mobile-app { background-image: url("../../assets/themes/mobile/synthwave-light-mobile.jpg") !important; }
+
+[data-style="ocean"] .mobile-app { background-image: url("../../assets/themes/mobile/ocean-dark-mobile.jpg") !important; }
+[data-theme="light"][data-style="ocean"] .mobile-app { background-image: url("../../assets/themes/mobile/ocean-light-mobile.jpg") !important; }
+
+[data-style="forest"] .mobile-app { background-image: url("../../assets/themes/mobile/forest-dark-mobile.jpg") !important; }
+[data-theme="light"][data-style="forest"] .mobile-app { background-image: url("../../assets/themes/mobile/forest-light-mobile.jpg") !important; }
+
+[data-style="aurora"] .mobile-app { background-image: url("../../assets/themes/mobile/aurora-dark-mobile.jpg") !important; }
+[data-theme="light"][data-style="aurora"] .mobile-app { background-image: url("../../assets/themes/mobile/aurora-light-mobile.jpg") !important; }
+
+[data-style="sakura"] .mobile-app {
+  background-color: #160c1c;
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(255, 126, 179, 0.34) 0%, transparent 48%),
+    radial-gradient(circle at 82% 28%, rgba(168, 85, 247, 0.28) 0%, transparent 50%),
+    radial-gradient(circle at 50% 88%, rgba(244, 63, 94, 0.22) 0%, transparent 55%),
+    linear-gradient(165deg, #1b0e24 0%, #120b1a 52%, #1d1025 100%) !important;
+}
+[data-theme="light"][data-style="sakura"] .mobile-app {
+  background-color: #fdf2f6;
+  background-image:
+    radial-gradient(circle at 18% 18%, rgba(255, 166, 201, 0.55) 0%, transparent 50%),
+    radial-gradient(circle at 85% 32%, rgba(232, 121, 169, 0.35) 0%, transparent 52%),
+    linear-gradient(165deg, #fff5f8 0%, #fce7f0 55%, #f8dbe7 100%) !important;
+}
+
+[data-style="midnight"] .mobile-app {
+  background-color: #090d16;
+  background-image:
+    radial-gradient(circle at 78% 16%, rgba(240, 192, 104, 0.28) 0%, transparent 46%),
+    radial-gradient(circle at 18% 72%, rgba(59, 130, 246, 0.20) 0%, transparent 54%),
+    linear-gradient(165deg, #0b1120 0%, #0f172a 48%, #16111c 100%) !important;
+}
+[data-theme="light"][data-style="midnight"] .mobile-app {
+  background-color: #f6f3ec;
+  background-image:
+    radial-gradient(circle at 80% 18%, rgba(240, 192, 104, 0.42) 0%, transparent 50%),
+    radial-gradient(circle at 20% 78%, rgba(148, 163, 184, 0.30) 0%, transparent 55%),
+    linear-gradient(165deg, #fbf9f4 0%, #f3ede0 58%, #eae3d2 100%) !important;
+}
+
+[data-style="cyber"] .mobile-app {
+  background-color: #070b14;
+  background-image:
+    radial-gradient(circle at 16% 24%, rgba(0, 245, 212, 0.30) 0%, transparent 46%),
+    radial-gradient(circle at 84% 68%, rgba(255, 45, 149, 0.26) 0%, transparent 48%),
+    linear-gradient(165deg, #070b14 0%, #0f1628 52%, #1a0f2e 100%) !important;
+}
+[data-theme="light"][data-style="cyber"] .mobile-app {
+  background-color: #eef6f8;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(0, 200, 180, 0.30) 0%, transparent 48%),
+    radial-gradient(circle at 84% 72%, rgba(217, 70, 239, 0.20) 0%, transparent 50%),
+    linear-gradient(165deg, #f3fafc 0%, #e4f1f5 55%, #ede8f7 100%) !important;
+}

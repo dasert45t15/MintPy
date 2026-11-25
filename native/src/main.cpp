@@ -91,12 +91,31 @@ struct AppState {
   bool is_mini_mode = false;
   RECT normal_bounds{0, 0, 1360, 860};
   bool mute_hotkey_registered = false;
+
+  std::atomic<bool> shutting_down{false};
+  std::atomic<int> active_workers{0};
 };
 
 AppState* g_app = nullptr;
 
+template <typename Fn>
+void spawn_worker(Fn&& fn) {
+  if (!g_app || g_app->shutting_down.load()) return;
+  g_app->active_workers.fetch_add(1);
+  std::thread([task = std::forward<Fn>(fn)]() mutable {
+    struct Guard {
+      ~Guard() {
+        if (g_app) g_app->active_workers.fetch_sub(1);
+      }
+    } guard;
+    if (g_app && !g_app->shutting_down.load()) {
+      task();
+    }
+  }).detach();
+}
+
 void post_json_to_js(const nlohmann::json& msg) {
-  if (!g_app || !g_app->hwnd) return;
+  if (!g_app || g_app->shutting_down.load() || !g_app->hwnd) return;
   auto* payload = new std::wstring(mintpy::utf8_to_wide(msg.dump()));
   if (!PostMessageW(g_app->hwnd, WM_MINTPY_POST_JSON, 0, reinterpret_cast<LPARAM>(payload))) {
     delete payload;
@@ -484,10 +503,19 @@ void handle_ipc_call(int id, const std::string& op, const nlohmann::json& args, 
         try {
           std::ifstream ifs{std::filesystem::path(in_path), std::ios::binary};
           auto backup = nlohmann::json::parse(ifs);
-          if (backup.value("format", "") != "mintpy-backup" || !backup.contains("data")) {
+          std::string fmt = backup.value("format", "");
+          if (fmt == "mintpy-backup" && backup.contains("data") && backup["data"].is_object()) {
+            g_app->store->replace_all(backup["data"]);
+          } else if (fmt == "mintpy-mobile-backup" || backup.contains("playlists") || backup.contains("favorites")) {
+            nlohmann::json converted = g_app->store->dump_all();
+            if (backup.contains("settings") && backup["settings"].is_object()) converted["settings"] = backup["settings"];
+            if (backup.contains("favorites") && backup["favorites"].is_array()) converted["favorites"] = backup["favorites"];
+            if (backup.contains("playlists") && backup["playlists"].is_array()) converted["playlists"] = backup["playlists"];
+            if (backup.contains("history") && backup["history"].is_array()) converted["history"] = backup["history"];
+            g_app->store->replace_all(converted);
+          } else {
             throw std::runtime_error("Unsupported MintPy backup");
           }
-          g_app->store->replace_all(backup["data"]);
           hydrate_allowed_files();
           post_json_to_js({{"id", id}, {"ok", true}, {"result", {{"canceled", false}, {"skippedLocalTracks", 0}}}});
         } catch (const std::exception& e) {
@@ -497,22 +525,22 @@ void handle_ipc_call(int id, const std::string& op, const nlohmann::json& args, 
       return;
     }
 
-    // Worker-thread asynchronous heavy operations (zero UI blocking)
+    // Worker-thread asynchronous heavy operations (safe lifecycle tracking, zero UI blocking)
     if (op == "search-tracks") {
       std::string q = args.value("q", "");
-      std::thread([id, q]() {
+      spawn_worker([id, q]() {
         try {
           auto tracks = mintpy::HttpClient::youtube_search(q, 20);
           post_json_to_js({{"id", id}, {"ok", true}, {"result", tracks}});
         } catch (const std::exception& e) {
           post_json_to_js({{"id", id}, {"ok", false}, {"error", e.what()}});
         }
-      }).detach();
+      });
       return;
     }
     if (op == "resolve-search-track") {
       auto t = args.contains("track") && args["track"].is_object() ? args["track"] : nlohmann::json::object();
-      std::thread([id, t]() {
+      spawn_worker([id, t]() {
         auto best = mintpy::HttpClient::resolve_search_track(
             mintpy::jstr(t, "artist", ""), mintpy::jstr(t, "title", ""), mintpy::jnum(t, "duration", 0.0));
         if (best.is_object()) {
@@ -526,25 +554,26 @@ void handle_ipc_call(int id, const std::string& op, const nlohmann::json& args, 
         } else {
           post_json_to_js({{"id", id}, {"ok", true}, {"result", nullptr}});
         }
-      }).detach();
+      });
       return;
     }
     if (op == "import-playlist-from-url") {
       std::string url = args.value("url", "");
-      std::thread([id, url]() {
+      spawn_worker([id, url]() {
         try {
           auto res = mintpy::HttpClient::import_playlist_from_url(url, g_app->ytdlp_path);
+          if (g_app->shutting_down.load()) return;
           auto created = g_app->store->add_imported_playlist(res.value("name", "Imported"), res.value("tracks", nlohmann::json::array()));
           post_json_to_js({{"id", id}, {"ok", true}, {"result", created}});
         } catch (const std::exception& e) {
           post_json_to_js({{"id", id}, {"ok", false}, {"error", e.what()}});
         }
-      }).detach();
+      });
       return;
     }
     if (op == "scan-folder") {
       std::string folder = args.value("folderPath", "");
-      std::thread([id, folder]() {
+      spawn_worker([id, folder]() {
         std::error_code ec;
         auto root = std::filesystem::weakly_canonical(mintpy::utf8_to_wide(folder), ec);
         bool allowed = false;
@@ -558,10 +587,11 @@ void handle_ipc_call(int id, const std::string& op, const nlohmann::json& args, 
         }
         auto tracks = mintpy::TagScanner::scan_folder(root, g_app->covers_dir, g_app->allowed_local_files, g_app->allowed_mutex,
                                                       [](const std::string& msg) { emit_event("scan-progress", msg); });
+        if (g_app->shutting_down.load()) return;
         std::string root_utf8 = mintpy::wide_to_utf8(root.wstring());
         g_app->store->merge_library_scan(root_utf8, tracks);
         post_json_to_js({{"id", id}, {"ok", true}, {"result", tracks}});
-      }).detach();
+      });
       return;
     }
     if (op == "audio:import-dropped-files" || op == "audio:import-dropped-file-objects") {
@@ -571,11 +601,12 @@ void handle_ipc_call(int id, const std::string& op, const nlohmann::json& args, 
           if (p.is_string()) paths.emplace_back(mintpy::utf8_to_wide(p.get<std::string>()));
         }
       }
-      std::thread([id, paths = std::move(paths)]() {
+      spawn_worker([id, paths = std::move(paths)]() {
         auto tracks = mintpy::TagScanner::scan_paths(paths, g_app->covers_dir, g_app->allowed_local_files, g_app->allowed_roots, g_app->allowed_mutex);
+        if (g_app->shutting_down.load()) return;
         if (!tracks.empty()) g_app->store->merge_library_scan("", tracks);
         post_json_to_js({{"id", id}, {"ok", true}, {"result", tracks}});
-      }).detach();
+      });
       return;
     }
 
@@ -986,11 +1017,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     DispatchMessageW(&msg);
   }
 
+  state.shutting_down.store(true);
+  for (int i = 0; i < 120 && state.active_workers.load() > 0; ++i) {
+    Sleep(15);
+  }
   state.discord->stop();
   state.proxy->stop();
   state.store->flush_sync();
   if (state.wv_ctrl) state.wv_ctrl->Close();
   if (state.wv_loader_mod) FreeLibrary(state.wv_loader_mod);
+  g_app = nullptr;
   if (mutex) CloseHandle(mutex);
   CoUninitialize();
   return static_cast<int>(msg.wParam);

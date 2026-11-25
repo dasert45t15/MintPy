@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const roots = ['src', 'src_mobile', 'scripts', 'tests', path.join('landing', 'js')];
-const files = ['app.js', 'preload.js'];
+const roots = ['shared', 'src', 'src_mobile', 'scripts', 'tests'];
+const files = [];
 
 function collect(dir) {
   if (!fs.existsSync(dir)) return;

@@ -1,16 +1,18 @@
-name: Build Windows release
+name: Verify & Build Native Windows Release
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  verify-and-build:
     runs-on: windows-latest
 
     steps:
@@ -21,25 +23,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Check JavaScript syntax
         run: npm run check
 
-      - name: Run tests
+      - name: Run architecture & unit tests
         run: npm test
 
-      - name: Build installer and portable app
-        run: npm run dist
+      - name: Download WebView2 SDK headers & loader
+        shell: pwsh
+        run: |
+          $wvDir = "tools/webview2"
+          New-Item -ItemType Directory -Force -Path $wvDir | Out-Null
+          Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2592.51" -OutFile "$wvDir/wv2.zip"
+          Expand-Archive -Path "$wvDir/wv2.zip" -DestinationPath $wvDir -Force
 
-      - name: Upload Windows builds
+      - name: Compile MintPy-Native.exe (C++20 / MinGW-w64)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/build-cpp.ps1
+
+      - name: Upload Native Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: MintPy-Windows
+          name: MintPy-Native-Windows-x64
           path: |
-            releases/MintPy Setup *.exe
-            releases/MintPy *.exe
+            releases/MintPy-Native.exe
+            releases/WebView2Loader.dll
           if-no-files-found: error
